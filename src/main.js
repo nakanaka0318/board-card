@@ -324,6 +324,24 @@ function bindSettings() {
   sync();
 }
 
+// ---------------- 画面の拡大を防ぐ (iOS Safari) ----------------
+// ピンチ操作でページ全体が拡大されないようにする (盤面のズームは 3D 側で処理)
+for (const ev of ['gesturestart', 'gesturechange']) {
+  document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
+}
+// 入力欄以外での素早い 2 回目のタップによる拡大を防ぐ
+let lastTouchEnd = 0;
+document.addEventListener('touchend', (e) => {
+  const now = Date.now();
+  const tag = e.target && e.target.tagName;
+  if (now - lastTouchEnd < 300 && tag !== 'INPUT' && tag !== 'SELECT' && tag !== 'TEXTAREA') {
+    e.preventDefault();
+    // 打ち消したタップもクリックとして扱い、連打 (+ボタンなど) を取りこぼさない
+    if (e.target && typeof e.target.click === 'function' && e.target.closest('button, .card, .db-tile, [role="button"]')) e.target.click();
+  }
+  lastTouchEnd = now;
+}, { passive: false });
+
 // ---------------- 起動 ----------------
 async function boot() {
   // カードのイラストを先に用意 (3D 模型を撮影)
