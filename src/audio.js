@@ -73,7 +73,7 @@ export class Sound {
         src.connect(c.destination);
         src.start(0);
       } catch { /* noop */ }
-      if (isIOS && this.enabled) {
+      if (isIOS && this.enabled && !document.hidden) {
         if (!this.tag) {
           this.tag = document.createElement('audio');
           this.tag.src = silentWav();
@@ -90,15 +90,34 @@ export class Sound {
     };
     const EVENTS = ['touchend', 'click', 'keydown', 'pointerup'];
     for (const ev of EVENTS) window.addEventListener(ev, unlock, true);
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden && this.ctx && this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
-    });
+    // バックグラウンド (別タブ・別アプリ・画面ロック) では一切音を出さない
+    const sync = () => (document.hidden ? this.pauseAll() : this.resumeAll());
+    document.addEventListener('visibilitychange', sync);
+    window.addEventListener('pagehide', () => this.pauseAll());
+    window.addEventListener('pageshow', sync);
+    window.addEventListener('blur', () => { if (document.hidden) this.pauseAll(); });
+    // 復帰後に自動再開できなかった場合 (iOS) は次のタップで再開する
+    window.addEventListener('pointerup', () => { if (this.backgrounded === false && this.enabled) this.resumeAll(); }, true);
+  }
+
+  pauseAll() {
+    this.backgrounded = true;
+    if (this.ctx && this.ctx.state === 'running') this.ctx.suspend().catch(() => {});
+    if (this.tag && !this.tag.paused) this.tag.pause();
+  }
+
+  resumeAll() {
+    if (document.hidden) return;
+    this.backgrounded = false;
+    if (!this.enabled) return;
+    if (this.ctx && this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
+    if (this.tag && this.tag.paused && this.unlocked) this.tag.play().catch(() => {});
   }
 
   setEnabled(on) {
     this.enabled = on;
-    if (this.tag) { if (on) this.tag.play().catch(() => {}); else this.tag.pause(); }
-    if (on) this.resume();
+    if (this.tag) { if (on && !document.hidden) this.tag.play().catch(() => {}); else this.tag.pause(); }
+    if (on && !document.hidden) this.resume();
   }
 
   setVolume(v) { this.volume = v; if (this.master) this.master.gain.value = v; }
@@ -144,7 +163,7 @@ export class Sound {
   }
 
   play(name) {
-    if (!this.enabled) return;
+    if (!this.enabled || document.hidden) return;
     const c = this.ensure();
     if (!c || c.state !== 'running') return;
     const now = performance.now();
@@ -205,7 +224,7 @@ export class Sound {
     ];
     let i = 0;
     const play = () => {
-      if (!this.musicOn || !this.enabled || c.state !== 'running') return;
+      if (!this.musicOn || !this.enabled || document.hidden || c.state !== 'running') return;
       const ch = chords[i++ % chords.length];
       const t = c.currentTime;
       for (const [k, f] of ch.entries()) {
