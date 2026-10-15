@@ -11,6 +11,7 @@ import { cardArt } from './render/cardart.js';
 import { el } from './ui/cardview.js';
 import { fillGlossary } from './ui/cardinfo.js';
 import { DeckBuilder } from './ui/deckbuilder.js';
+import { openChangelog, updateBadges } from './ui/changelog.js';
 import { deckOptions, resolveDeck, randomPreset } from './ui/decks.js';
 
 const $ = (id) => document.getElementById(id);
@@ -259,6 +260,8 @@ function titleToast(msg, ms = 2400) {
   titleToast.timer = setTimeout(() => t.classList.remove('show'), ms);
 }
 $('btn-title-deck').onclick = titleDeck;
+$('btn-title-changelog').onclick = () => { sound.resume(); openChangelog(); };
+$('btn-changelog').onclick = () => openChangelog();
 $('btn-deck').onclick = () => (game ? game.openDeck() : titleDeck());
 function toggleSound() {
   settings.sound = !settings.sound;
@@ -358,6 +361,7 @@ async function boot() {
   }
   bindSettings();
   updateSoundBtn();
+  updateBadges();
   fillGlossary();
   buildTitle();
   showTitle();

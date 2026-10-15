@@ -184,3 +184,13 @@ test('英雄の力の対象', () => {
   assert.equal(t.length, 1);
   assert.ok(unitAt(s, t[0].x, t[0].y));
 });
+
+test('アップデート履歴: 新しい順で、バージョンが package.json と一致', async () => {
+  const { CHANGELOG, CURRENT_VERSION } = await import('../src/data/changelog.js');
+  const { readFileSync } = await import('node:fs');
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url)));
+  assert.equal(CURRENT_VERSION, pkg.version);
+  const num = (v) => v.split('.').map(Number).reduce((a, b) => a * 1000 + b, 0);
+  for (let i = 1; i < CHANGELOG.length; i++) assert.ok(num(CHANGELOG[i - 1].version) > num(CHANGELOG[i].version));
+  for (const v of CHANGELOG) for (const it of v.items) assert.ok(['新機能', '改善', '調整', '修正'].includes(it.tag));
+});

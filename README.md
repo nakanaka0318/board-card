@@ -99,6 +99,11 @@ vendor/three/               Three.js r170 (MIT)
 tests/                      ルールエンジンと AI のテスト
 ```
 
+## アップデート履歴
+
+ゲーム内のタイトル画面・メニューの「📜 更新履歴」、または [CHANGELOG.md](CHANGELOG.md) を参照。
+履歴は `src/data/changelog.js` で管理し、`npm run changelog` で CHANGELOG.md を再生成します。
+
 ## テスト
 
 ```bash

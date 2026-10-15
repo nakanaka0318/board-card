@@ -38,6 +38,7 @@
       <button class="icon-btn" id="btn-threat" title="敵が次のターンに攻撃できる範囲を表示 (V)">👁<span>脅威</span></button>
       <button class="icon-btn" id="btn-rules" title="遊び方">📖<span>遊び方</span></button>
       <button class="icon-btn" id="btn-sound" title="音のオン/オフ (M)">🔊<span>音</span></button>
+      <button class="icon-btn cl-badge-host" id="btn-changelog" title="アップデート履歴">📜<span>履歴</span></button>
       <button class="icon-btn" id="btn-settings" title="設定">⚙<span>設定</span></button>
       <button class="icon-btn" id="btn-menu" title="タイトルへ戻る">⏻<span>終了</span></button>
     </div>
@@ -133,7 +134,9 @@
         <button id="btn-start" class="big-btn">戦いを始める</button>
         <button id="btn-title-deck" class="ghost-btn">🃏 デッキ編成</button>
         <button id="btn-title-rules" class="ghost-btn">遊び方</button>
+        <button id="btn-title-changelog" class="ghost-btn cl-badge-host">📜 更新履歴</button>
       </div>
+      <div id="title-version" class="title-version"></div>
     </div>
   </div>
 
@@ -237,6 +240,15 @@
       <div class="deck-tabs" id="deck-tabs"></div>
       <div class="deck-summary" id="deck-summary"></div>
       <div class="deck-grid" id="deck-grid"></div>
+    </div>
+  </div>
+
+  <div id="modal-changelog" class="modal hidden">
+    <div class="modal-box changelog-box">
+      <button class="modal-close">✕</button>
+      <h2>アップデート履歴</h2>
+      <p class="cl-current" id="changelog-current"></p>
+      <div id="changelog-list"></div>
     </div>
   </div>
 
