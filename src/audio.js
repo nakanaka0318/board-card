@@ -5,6 +5,9 @@ export class Sound {
     this.enabled = true;
     this.musicOn = true;
     this.volume = 0.5;
+    // true: 他のアプリの音・動画と混ぜて再生する (iOS ではマナーモード中は鳴らない)
+    // false: 再生モード (マナーモードでも鳴るが、他のアプリの再生は止まる)
+    this.mix = true;
     this.last = {};
   }
 
@@ -64,7 +67,7 @@ export class Sound {
     const unlock = () => {
       const c = this.ensure();
       if (!c) return;
-      try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* 未対応 */ }
+      this.applySession();
       if (c.state !== 'running') c.resume().catch(() => {});
       try {
         const b = c.createBuffer(1, 1, 22050);
@@ -73,17 +76,8 @@ export class Sound {
         src.connect(c.destination);
         src.start(0);
       } catch { /* noop */ }
-      if (isIOS && this.enabled && !document.hidden) {
-        if (!this.tag) {
-          this.tag = document.createElement('audio');
-          this.tag.src = silentWav();
-          this.tag.loop = true;
-          this.tag.setAttribute('playsinline', '');
-          this.tag.setAttribute('x-webkit-airplay', 'deny');
-        }
-        this.tag.play().catch(() => {});
-      }
-      if (c.state === 'running' && (!isIOS || (this.tag && !this.tag.paused))) {
+      if (isIOS && this.enabled && !this.mix && !document.hidden) this.ensureTag().play().catch(() => {});
+      if (c.state === 'running' && (!isIOS || this.mix || (this.tag && !this.tag.paused))) {
         for (const ev of EVENTS) window.removeEventListener(ev, unlock, true);
         this.unlocked = true;
       }
@@ -100,6 +94,33 @@ export class Sound {
     window.addEventListener('pointerup', () => { if (this.backgrounded === false && this.enabled) this.resumeAll(); }, true);
   }
 
+  // オーディオセッションの種類を設定に合わせる (iOS Safari 16.4+)
+  applySession() {
+    try {
+      if (navigator.audioSession) navigator.audioSession.type = this.mix ? 'ambient' : 'playback';
+    } catch { /* 未対応 */ }
+  }
+
+  ensureTag() {
+    if (!this.tag) {
+      this.tag = document.createElement('audio');
+      this.tag.src = silentWav();
+      this.tag.loop = true;
+      this.tag.setAttribute('playsinline', '');
+      this.tag.setAttribute('x-webkit-airplay', 'deny');
+    }
+    return this.tag;
+  }
+
+  setMix(mix) {
+    this.mix = mix;
+    this.applySession();
+    if (mix) { if (this.tag) this.tag.pause(); return; }
+    // iOS でマナーモード中も鳴らすには、無音の audio 要素で再生カテゴリにする
+    const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (isIOS && this.enabled && this.unlocked && !document.hidden) this.ensureTag().play().catch(() => {});
+  }
+
   pauseAll() {
     this.backgrounded = true;
     if (this.ctx && this.ctx.state === 'running') this.ctx.suspend().catch(() => {});
@@ -111,12 +132,12 @@ export class Sound {
     this.backgrounded = false;
     if (!this.enabled) return;
     if (this.ctx && this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
-    if (this.tag && this.tag.paused && this.unlocked) this.tag.play().catch(() => {});
+    if (this.tag && this.tag.paused && this.unlocked && !this.mix) this.tag.play().catch(() => {});
   }
 
   setEnabled(on) {
     this.enabled = on;
-    if (this.tag) { if (on && !document.hidden) this.tag.play().catch(() => {}); else this.tag.pause(); }
+    if (this.tag) { if (on && !this.mix && !document.hidden) this.tag.play().catch(() => {}); else this.tag.pause(); }
     if (on && !document.hidden) this.resume();
   }
 

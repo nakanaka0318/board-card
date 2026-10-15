@@ -16,7 +16,7 @@ import { deckOptions, resolveDeck, randomPreset } from './ui/decks.js';
 const $ = (id) => document.getElementById(id);
 
 // ---------------- 設定 ----------------
-const DEFAULTS = { sound: true, music: true, volume: 0.5, speed: 1, quality: 'high', follow: true, gaze: true };
+const DEFAULTS = { sound: true, music: true, mix: true, volume: 0.5, speed: 1, quality: 'high', follow: true, gaze: true };
 function loadSettings() {
   try {
     const raw = localStorage.getItem('arcana-settings');
@@ -270,7 +270,7 @@ function toggleSound() {
   if (settings.sound) { sound.startMusic(); sound.play('select'); }
   updateSoundBtn();
   saveSettings();
-  hud.toast(settings.sound ? '🔊 音をオンにしました (iPhone はマナーモードでも鳴ります)' : '🔇 音をオフにしました');
+  hud.toast(settings.sound ? (settings.mix ? '🔊 音をオンにしました (iPhone はマナーモード中は鳴りません)' : '🔊 音をオンにしました') : '🔇 音をオフにしました');
 }
 function updateSoundBtn() {
   const b = $('btn-sound');
@@ -301,6 +301,7 @@ document.querySelectorAll('.modal').forEach((m) => {
 function bindSettings() {
   const s = settings;
   const sync = () => {
+    sound.setMix(s.mix !== false);
     sound.setEnabled(s.sound);
     sound.musicOn = s.music;
     sound.setVolume(s.volume);
@@ -314,6 +315,8 @@ function bindSettings() {
   $('set-quality').value = s.quality;
   $('set-follow').checked = s.follow;
   $('set-gaze').checked = s.gaze;
+  $('set-mix').checked = s.mix !== false;
+  $('set-mix').onchange = (e) => { s.mix = e.target.checked; sync(); saveSettings(); };
   $('set-sound').onchange = (e) => { s.sound = e.target.checked; sync(); saveSettings(); updateSoundBtn(); };
   $('set-music').onchange = (e) => { s.music = e.target.checked; sync(); saveSettings(); if (s.music) sound.startMusic(); };
   $('set-volume').oninput = (e) => { s.volume = +e.target.value; sync(); saveSettings(); };
