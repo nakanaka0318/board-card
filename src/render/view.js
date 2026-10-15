@@ -114,7 +114,7 @@ export class BoardView {
     const landscapePhone = h <= 520 && aspect > 1;
     const dist = Math.max(base.length(), need) * (landscapePhone ? 1.04 : 1);
     // 手札などの UI に隠れないよう、盤面が画面のやや上に来るよう注視点をずらす
-    const target = new THREE.Vector3(0, 0, landscapePhone ? 1.5 : aspect < 1 ? 0.9 : 0.4);
+    const target = new THREE.Vector3(0, 0, landscapePhone ? 1.5 : aspect < 1 ? 0.9 : 1.0);
     this.homeView = { pos: base.clone().setLength(dist).add(target), target };
     this.controls.maxDistance = Math.max(20, dist * 1.3);
     const cls = landscapePhone ? 'land' : aspect < 1 ? 'port' : 'wide';

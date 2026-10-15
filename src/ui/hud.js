@@ -172,18 +172,24 @@ export class HUD {
         c = renderCard(h.cardId);
         c.classList.add('drawn');
         c.dataset.uid = h.uid;
-        c.addEventListener('mouseenter', () => { c.dataset.hover = '1'; this.layoutHand(); if (this.hoverCb) this.hoverCb(h.uid, true); });
-        c.addEventListener('mouseleave', () => { c.dataset.hover = ''; this.layoutHand(); if (this.hoverCb) this.hoverCb(h.uid, false); });
-        c.addEventListener('click', (e) => { e.stopPropagation(); if (this.clickCb) this.clickCb(h.uid); });
+        // ホバーはマウスのときだけ (タッチでは拡大が残り続けてしまう)
+        c.addEventListener('pointerenter', (e) => { if (e.pointerType !== 'mouse' || this.dragging) return; c.dataset.hover = '1'; this.layoutHand(); if (this.hoverCb) this.hoverCb(h.uid, true); });
+        c.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'mouse') return; c.dataset.hover = ''; this.layoutHand(); if (this.hoverCb) this.hoverCb(h.uid, false); });
+        c.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (this.suppressClick) { this.suppressClick = false; return; }
+          if (this.clickCb) this.clickCb(h.uid);
+        });
+        this.bindDrag(c, h.uid, h.cardId);
         // 長押し・右クリックで詳細
-        onLongPress(c, () => { c.dataset.hover = ''; this.layoutHand(); showCardDetail(h.cardId); });
+        onLongPress(c, () => { if (this.dragging) return; c.dataset.hover = ''; this.layoutHand(); showCardDetail(h.cardId); });
         c.addEventListener('contextmenu', (e) => { e.preventDefault(); showCardDetail(h.cardId); });
         const key = el('div', 'c-key', String(i + 1));
         c.appendChild(key);
-        this.hand.appendChild(c);
         this.handCards.set(h.uid, c);
         setTimeout(() => c.classList.remove('drawn'), 700);
       }
+      this.hand.appendChild(c); // 手札の順番どおりに並べ直す
       c.querySelector('.c-key').textContent = i < 9 ? String(i + 1) : '';
       c.dataset.index = i;
       c.dataset.n = n;
@@ -194,24 +200,105 @@ export class HUD {
       c.classList.toggle('selected', selectedHand === h.uid);
     });
     this.hand.classList.toggle('disabled', !humanTurn);
+    this.hand.classList.toggle('tray', trayMode());
     this.layoutHand();
+    const sel = selectedHand != null && this.handCards.get(selectedHand);
+    if (sel && trayMode()) sel.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+  }
+
+  // 手札のカードを上へドラッグして盤面に出す
+  bindDrag(c, uid, cardId) {
+    let start = null, ghost = null;
+    const move = (e) => {
+      if (!start || e.pointerId !== start.id) return;
+      const dx = e.clientX - start.x, dy = e.clientY - start.y;
+      if (!ghost) {
+        // 上方向に動かしたらドラッグ開始 (横方向はスクロールに任せる)
+        if (dy > -16 || Math.abs(dy) < Math.abs(dx)) {
+          if (Math.hypot(dx, dy) > 16) start = null;
+          return;
+        }
+        if (!this.dragCb || !this.dragCb.begin(uid)) { start = null; return; }
+        this.dragging = true;
+        try { c.setPointerCapture(e.pointerId); } catch { /* noop */ }
+        ghost = el('div', 'drag-ghost');
+        ghost.appendChild(renderCard(cardId));
+        document.body.appendChild(ghost);
+        c.classList.add('dragging');
+        c.dataset.hover = '';
+        this.layoutHand();
+      }
+      ghost.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`;
+      const overHand = e.clientY > this.hand.getBoundingClientRect().top + 10;
+      ghost.classList.toggle('over-hand', overHand);
+      this.dragCb.over(overHand ? null : e);
+    };
+    const up = (e) => {
+      if (!start || e.pointerId !== start.id) return;
+      start = null;
+      if (!ghost) return;
+      ghost.remove();
+      ghost = null;
+      c.classList.remove('dragging');
+      this.dragging = false;
+      this.suppressClick = true;
+      setTimeout(() => { this.suppressClick = false; }, 50);
+      const overHand = e.type === 'pointercancel' || e.clientY > this.hand.getBoundingClientRect().top + 10;
+      this.dragCb.drop(overHand ? null : e);
+    };
+    c.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
+      start = { x: e.clientX, y: e.clientY, id: e.pointerId };
+      // マウスはホバー拡大でカードが動くので、押した瞬間から追跡する
+      if (e.pointerType === 'mouse') { try { c.setPointerCapture(e.pointerId); } catch { /* noop */ } }
+    });
+    c.addEventListener('pointermove', move);
+    c.addEventListener('pointerup', up);
+    c.addEventListener('pointercancel', up);
+  }
+
+  // 現在の操作の案内と、発動・詳細・キャンセルのボタン
+  setActionBar(spec) {
+    const bar = $('action-bar');
+    document.body.classList.toggle('has-action', !!spec);
+    if (!spec) { bar.classList.add('hidden'); bar.innerHTML = ''; return; }
+    bar.innerHTML = '';
+    const text = el('div', 'ab-text');
+    text.appendChild(el('div', 'ab-title', spec.title));
+    if (spec.hint) text.appendChild(el('div', 'ab-hint', spec.hint));
+    bar.appendChild(text);
+    const btns = el('div', 'ab-btns');
+    for (const b of spec.buttons || []) {
+      const x = el('button', 'ab-btn ' + (b.cls || ''), b.label);
+      x.type = 'button';
+      x.onclick = (e) => { e.stopPropagation(); b.onClick(); };
+      btns.appendChild(x);
+    }
+    bar.appendChild(btns);
+    bar.classList.remove('hidden');
   }
 
   layoutHand() {
     const cards = [...this.handCards.values()];
+    if (trayMode()) {
+      for (const c of cards) { c.style.transform = ''; c.style.zIndex = ''; }
+      return;
+    }
     const anyHover = cards.some((c) => c.dataset.hover === '1');
     const base = handScale();
     for (const c of cards) {
       const i = +c.dataset.index, n = +c.dataset.n, sp = +c.dataset.spacing;
       const off = i - (n - 1) / 2;
-      const hover = c.dataset.hover === '1';
-      const sel = c.classList.contains('selected');
+      const dragging = c.classList.contains('dragging');
+      const hover = c.dataset.hover === '1' && !dragging;
+      const sel = c.classList.contains('selected') && !dragging;
       let x = off * sp - 64;
       let rot = off * 3.2;
       // 縮小時は変形の基準点 (カード下端より下) に引っ張られて沈む分を戻す
       let y = Math.abs(off) * Math.abs(off) * 2.2 * base - 36 * (1 - base);
       let scale = base;
-      if (hover || sel) { rot = 0; y = base < 1 ? -70 * base : -110; scale = 1.42 * base; }
+      if (hover) { rot = 0; y = base < 1 ? -70 * base : -110; scale = 1.42 * base; }
+      else if (sel) { rot = 0; y = -34 * base; scale = 1.06 * base; } // 選択中は案内バーがあるので控えめに持ち上げる
       else if (anyHover) {
         const hi = cards.find((k) => k.dataset.hover === '1');
         const d = i - +hi.dataset.index;
@@ -439,6 +526,12 @@ export class HUD {
       this.cancelDir = () => done(null);
     });
   }
+}
+
+// タッチ端末や狭い画面では手札を重ねず横スクロールで並べる
+export function trayMode() {
+  const w = window.innerWidth, h = window.innerHeight;
+  return window.matchMedia('(hover: none)').matches || w <= 600 || (h <= 520 && w > h);
 }
 
 // 画面サイズに応じた手札の縮尺

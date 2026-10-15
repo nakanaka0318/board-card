@@ -164,6 +164,7 @@ export function onLongPress(target, fn, ms = 450) {
   let timer = null, sx = 0, sy = 0, fired = false;
   target.addEventListener('pointerdown', (e) => {
     fired = false;
+    if (e.pointerType === 'mouse') return; // PC は右クリックで詳細
     sx = e.clientX; sy = e.clientY;
     clearTimeout(timer);
     timer = setTimeout(() => { fired = true; fn(e); }, ms);

@@ -7,7 +7,7 @@ import {
 import { DIFFICULTY, planTurn, describePlan, intentOf, evaluate, winProb, threatMap } from './engine/ai.js';
 import { randomSeed } from './engine/rng.js';
 import { cardLink } from './ui/hud.js';
-import { showCardDetail, openDeckViewer } from './ui/cardinfo.js';
+import { showCardDetail, openDeckViewer, targetText } from './ui/cardinfo.js';
 
 const isTouch = () => window.matchMedia('(hover: none)').matches;
 
@@ -58,6 +58,7 @@ export class Game {
     this.hud.aiReset(this.opts.watch ? 'AI 思考エンジン' : 'AI 思考エンジン', DIFFICULTY[this.opts.diff].name);
     this.hud.hoverCb = (uid, on) => this.onHandHover(uid, on);
     this.hud.clickCb = (uid) => this.onHandClick(uid);
+    this.hud.dragCb = { begin: (uid) => this.dragBegin(uid), over: (e) => this.dragOver(e), drop: (e) => this.dragDrop(e) };
     document.body.classList.toggle('watch', !!this.opts.watch);
     this.hud.addLog(`${FACTIONS[o.factions[0]].name} 対 ${FACTIONS[o.factions[1]].name} — ${first === 0 ? this.names[0] : this.names[1]}の先攻`, 'sys');
     this.refreshUI();
@@ -73,6 +74,7 @@ export class Game {
 
   abort() {
     this.aborted = true;
+    this.hud.setActionBar(null);
     this.view.clearHighlights();
     this.hud.tooltip(0, 0, null);
   }
@@ -225,6 +227,7 @@ export class Game {
     const p0 = winProb(evaluate(s, 0, null, s.current));
     this.hud.setBalance(p0, this.opts.watch ? ['青軍', '赤軍'] : ['あなた', 'AI']);
     if (this.sel.mode === 'idle') this.updateHighlights();
+    else this.updateActionBar();
   }
 
   // ------------------------------------------------------------
@@ -385,6 +388,7 @@ export class Game {
     this.showThreat = !this.showThreat;
     document.getElementById('btn-threat').classList.toggle('on', this.showThreat);
     if (this.sel.mode === 'idle') this.updateHighlights();
+    else this.updateActionBar();
   }
 
   // ------------------------------------------------------------
@@ -421,6 +425,7 @@ export class Game {
       if (sel.preview) for (const t of sel.preview) list.push({ x: t.x, y: t.y, kind: 'select' });
     }
     this.view.setHighlights(list);
+    this.updateActionBar();
   }
 
   selectUnit(u) {
@@ -502,37 +507,30 @@ export class Game {
     this.hud.tooltip(e ? e.clientX : 0, e ? e.clientY : 0, tip);
   }
 
-  async onClick(hit) {
+  async onClick(hit, e) {
     if (this.aborted || this.picking) return;
     this.sound.resume();
-    // タッチ端末ではタップしたユニット/マスの情報を下部に固定表示
-    if (isTouch()) {
+    const sel = this.sel;
+    // タッチ端末では、何も選んでいない時にタップしたユニット/マスの情報を固定表示
+    if (isTouch() && sel.mode === 'idle') {
       if (hit) {
         const t = unitAt(this.state, hit.x, hit.y);
         if (t) this.hud.inspectUnit(this.state, t, this.names, { pinned: true });
-        else if (this.sel.mode === 'idle') this.hud.inspectTile(this.state, hit.x, hit.y, { pinned: true });
+        else this.hud.inspectTile(this.state, hit.x, hit.y, { pinned: true });
       } else this.hud.hideInspector(true);
     }
     if (!this.humanTurn) return;
     const s = this.state;
-    const sel = this.sel;
+    if (sel.mode !== 'idle') hit = this.snap(hit, e);
     if (!hit) { if (sel.mode !== 'idle') { this.sfx('cancel'); this.clearSelection(); } return; }
     const u = unitAt(s, hit.x, hit.y);
 
     if (sel.mode === 'card') {
-      const h = s.players[this.human].hand.find((x) => x.uid === sel.handUid);
-      const c = CARDS[sel.cardId];
-      if (!h) return this.clearSelection();
-      if (!sel.targets) return this.playCard(h, {});
-      if (!sel.targets.some((t) => t.x === hit.x && t.y === hit.y)) { this.sfx('cancel'); return this.clearSelection(); }
-      let dir;
-      if (c.dir) {
-        this.picking = true;
-        dir = await this.hud.pickDirection(c.target);
-        this.picking = false;
-        if (dir === null) return;
-      }
-      return this.playCard(h, { x: hit.x, y: hit.y, dir });
+      if (!sel.targets || sel.targets.some((t) => t.x === hit.x && t.y === hit.y)) return this.useSelectedCardAt(hit);
+      if (u && u.owner === this.human) return this.trySelectUnit(u);
+      this.sfx('error');
+      this.hud.toast('そこには使えません。光っているマスを選んでください');
+      return;
     }
     if (sel.mode === 'hero') {
       if (!sel.targets.some((t) => t.x === hit.x && t.y === hit.y)) { this.sfx('cancel'); return this.clearSelection(); }
@@ -553,14 +551,120 @@ export class Game {
       }
       if (u && u.uid === sel.uid) { this.sfx('cancel'); return this.clearSelection(); }
     }
-    // 自軍ユニットの選択
-    if (u && u.owner === this.human) {
-      if (canMove(s, u) || (canAttack(s, u) && (targetsFrom(s, u, u.x, u.y).length || canMove(s, u)))) return this.selectUnit(u);
-      this.hud.toast(u.sick ? 'このユニットは召喚されたばかりで、次のターンから行動できます' : u.frozen ? 'このユニットは凍結しています' : 'このユニットは行動済みです');
-      this.sfx('error');
-      return this.clearSelection();
-    }
+    if (u && u.owner === this.human) return this.trySelectUnit(u);
     if (sel.mode !== 'idle') { this.sfx('cancel'); this.clearSelection(); }
+  }
+
+  trySelectUnit(u) {
+    const s = this.state;
+    if (canMove(s, u) || (canAttack(s, u) && (targetsFrom(s, u, u.x, u.y).length || canMove(s, u)))) return this.selectUnit(u);
+    this.hud.toast(u.sick ? 'このユニットは召喚されたばかりで、次のターンから行動できます' : u.frozen ? 'このユニットは凍結しています' : 'このユニットは行動済みです');
+    this.sfx('error');
+    this.clearSelection();
+  }
+
+  // 今の操作で選べるマス
+  validTiles() {
+    const s = this.state, sel = this.sel;
+    if (sel.mode === 'card' || sel.mode === 'hero') return sel.targets || [];
+    if (sel.mode === 'unit') {
+      const out = [];
+      if (sel.reach) for (const i of sel.reach.tiles) out.push({ x: i % W, y: (i / W) | 0 });
+      for (const t of sel.direct) out.push({ x: t.x, y: t.y });
+      for (const [tuid] of sel.viaMove) { const t = unitById(s, tuid); if (t) out.push({ x: t.x, y: t.y }); }
+      return out;
+    }
+    return [];
+  }
+
+  // 少しずれたタップを、近くの選べるマスに吸着させる
+  snap(hit, e) {
+    const list = this.validTiles();
+    if (hit && list.some((t) => t.x === hit.x && t.y === hit.y)) return hit;
+    if (!e || e.clientX === undefined || !list.length) return hit;
+    const radius = e.pointerType === 'mouse' ? 22 : 44;
+    let best = null, bd = radius;
+    for (const t of list) {
+      const p = this.view.screenPos(this.view.tileWorldPos(t.x, t.y));
+      const d = Math.hypot(p.x - e.clientX, p.y - e.clientY);
+      if (d < bd) { bd = d; best = t; }
+    }
+    return best ? { x: best.x, y: best.y, uid: null } : hit;
+  }
+
+  async useSelectedCardAt(hit) {
+    const s = this.state, sel = this.sel;
+    const h = s.players[this.human].hand.find((x) => x.uid === sel.handUid);
+    if (!h) return this.clearSelection();
+    const c = CARDS[sel.cardId];
+    if (!sel.targets) return this.playCard(h, {});
+    let dir;
+    if (c.dir) {
+      this.picking = true;
+      dir = await this.hud.pickDirection(c.target);
+      this.picking = false;
+      if (dir === null) return;
+    }
+    return this.playCard(h, { x: hit.x, y: hit.y, dir });
+  }
+
+  // 操作案内バー
+  updateActionBar() {
+    const sel = this.sel;
+    if (this.aborted || !this.humanTurn || sel.mode === 'idle') { this.hud.setActionBar(null); return; }
+    const s = this.state;
+    const cancel = { label: 'キャンセル', onClick: () => { this.sfx('cancel'); this.clearSelection(); } };
+    if (sel.mode === 'card') {
+      const c = CARDS[sel.cardId];
+      const buttons = [];
+      if (!sel.targets) buttons.push({ label: '▶ 発動する', cls: 'primary', onClick: () => { const h = s.players[this.human].hand.find((x) => x.uid === sel.handUid); if (h) this.playCard(h, {}); } });
+      buttons.push({ label: '詳細', onClick: () => showCardDetail(sel.cardId) }, cancel);
+      const hint = !sel.targets ? `${c.text} — 「発動する」で使用`
+        : c.type === 'unit' ? '光っているマスをタップ (カードをドラッグしてもOK)'
+          : `${targetText(c)}をタップ${c.dir ? ' → 向きを選択' : ''}`;
+      this.hud.setActionBar({ title: `${c.name} <small>${c.cost}マナ</small>`, hint, buttons });
+    } else if (sel.mode === 'hero') {
+      const h = FACTIONS[s.players[this.human].faction].hero;
+      this.hud.setActionBar({ title: `英雄の力「${h.name}」 <small>${h.cost}マナ</small>`, hint: `${h.text} 光っている対象をタップ`, buttons: [cancel] });
+    } else if (sel.mode === 'unit') {
+      const u = unitById(s, sel.uid);
+      if (!u) { this.hud.setActionBar(null); return; }
+      const parts = [];
+      if (sel.reach && sel.reach.tiles.length) parts.push('<span class="ab-move">青</span>のマスへ移動');
+      if (sel.direct.length || sel.viaMove.size) parts.push('<span class="ab-atk">赤</span>の敵を攻撃 (移動も自動)');
+      const name = u.leader ? 'あなたの将' : CARDS[u.cardId].name;
+      this.hud.setActionBar({
+        title: `${name} <small>⚔${u.atk} ❤${u.hp}</small>`,
+        hint: parts.length ? parts.join(' / ') : 'このターンにできることはありません',
+        buttons: [{ label: '詳細', onClick: () => showCardDetail(u.cardId, { unit: u, state: s, ownerName: this.names[u.owner] }) }, { label: '選択解除', onClick: cancel.onClick }],
+      });
+    }
+  }
+
+  // 手札ドラッグ
+  dragBegin(uid) {
+    if (!this.humanTurn) return false;
+    const h = this.state.players[this.human].hand.find((x) => x.uid === uid);
+    if (!h || !canPlay(this.state, this.human, h)) return false;
+    if (!(this.sel.mode === 'card' && this.sel.handUid === uid)) this.selectCard(h);
+    return true;
+  }
+
+  dragOver(e) {
+    if (!e) { this.view.setHover(null, null); this.hud.tooltip(0, 0, null); return; }
+    const hit = this.snap(this.view.pick(e.clientX, e.clientY), e);
+    this.onHover(hit, { clientX: e.clientX, clientY: e.clientY, pointerType: 'drag' });
+  }
+
+  async dragDrop(e) {
+    this.view.setHover(null, null);
+    this.hud.tooltip(0, 0, null);
+    if (!e || this.sel.mode !== 'card') return;
+    const hit = this.snap(this.view.pick(e.clientX, e.clientY), e);
+    if (!this.sel.targets) { if (hit) return this.useSelectedCardAt(hit); return; }
+    if (hit && this.sel.targets.some((t) => t.x === hit.x && t.y === hit.y)) return this.useSelectedCardAt(hit);
+    this.sfx('error');
+    this.hud.toast('そこには使えません。光っているマスに置いてください');
   }
 
   onRightClick(hit) {
@@ -610,10 +714,6 @@ export class Game {
 
   onHandClick(uid) {
     this.sound.resume();
-    if (isTouch()) {
-      const hh = this.state.players[this.human ?? 0].hand.find((x) => x.uid === uid);
-      if (hh) this.hud.inspectCard(hh.cardId, { pinned: true });
-    }
     if (!this.humanTurn) return;
     const s = this.state;
     const h = s.players[this.human].hand.find((x) => x.uid === uid);
@@ -626,14 +726,17 @@ export class Game {
     const c = CARDS[h.cardId];
     if (!canPlay(s, this.human, h)) {
       this.sfx('error');
-      this.hud.toast(c.cost > s.players[this.human].mana ? `マナが足りません (必要 ${c.cost})` : '有効な対象がありません');
+      this.hud.toast(c.cost > s.players[this.human].mana ? `マナが足りません (必要 ${c.cost} / 現在 ${s.players[this.human].mana})` : '今は使える対象がありません');
       return;
     }
+    this.selectCard(h);
+  }
+
+  selectCard(h) {
     this.clearSelection(false);
-    this.sel = { mode: 'card', handUid: uid, cardId: h.cardId, targets: cardTargets(s, this.human, h.cardId) };
+    this.hud.hideInspector(true);
+    this.sel = { mode: 'card', handUid: h.uid, cardId: h.cardId, targets: cardTargets(this.state, this.human, h.cardId) };
     this.sfx('select');
-    if (!this.sel.targets) this.hud.toast(`「${c.name}」: もう一度カードか盤面をクリックで発動 (右クリックでキャンセル)`);
-    else this.hud.toast(c.type === 'unit' ? '召喚するマスを選んでください' : '対象を選んでください');
     this.updateHighlights();
     this.refreshUI();
   }
@@ -651,7 +754,6 @@ export class Game {
     const h = FACTIONS[s.players[this.human].faction].hero;
     this.clearSelection(false);
     this.sel = { mode: 'hero', targets: targetsFor(s, this.human, h.target) };
-    this.hud.toast(`英雄の力「${h.name}」: ${h.text}`);
     this.sfx('select');
     this.updateHighlights();
     this.refreshUI();
