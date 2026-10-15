@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>アルカナ・フィールド</title>
+  <meta name="description" content="動く大地の上で戦う 3D フィールドカードゲーム。思考する AI と対戦しよう。">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@600;800&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=Cinzel:wght@700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+  </script>
+</head>
+<body>
+  <div id="scene"></div>
+
+  <!-- ===================== ゲーム中の UI ===================== -->
+  <div id="ui" class="hidden">
+    <div id="panel-1" class="player-panel enemy"></div>
+    <div id="panel-0" class="player-panel me"></div>
+
+    <div id="center-info">
+      <div id="turn-label">—</div>
+      <div id="round-label"></div>
+      <div id="balance" title="AI による形勢判断 (あなた側の有利度)">
+        <span class="bal-l">あなた</span>
+        <div class="bal-bar"><div class="bal-fill"></div><div class="bal-mid"></div></div>
+        <span class="bal-r">AI</span>
+      </div>
+      <div id="tectonic" title="地殻変動: 中央の8マスが回転、または大地が隆起・沈降する"></div>
+    </div>
+
+    <div id="menu-buttons">
+      <button class="icon-btn" id="btn-hint" title="AI に次の一手を相談する (H)">💡<span>助言</span></button>
+      <button class="icon-btn" id="btn-threat" title="敵が次のターンに攻撃できる範囲を表示 (V)">👁<span>脅威</span></button>
+      <button class="icon-btn" id="btn-rules" title="遊び方">📖<span>遊び方</span></button>
+      <button class="icon-btn" id="btn-settings" title="設定">⚙<span>設定</span></button>
+      <button class="icon-btn" id="btn-menu" title="タイトルへ戻る">⏻<span>終了</span></button>
+    </div>
+
+    <div id="enemy-hand"></div>
+
+    <div id="side">
+      <div id="ai-panel">
+        <div class="ai-head"><span class="ai-eye"></span><span id="ai-title">AI 思考エンジン</span><span id="ai-diff"></span></div>
+        <div id="ai-status">待機中</div>
+        <div class="ai-meters">
+          <div><label>評価局面</label><b id="ai-evals">0</b></div>
+          <div><label>探索深さ</label><b id="ai-depth">0</b></div>
+          <div><label>思考時間</label><b id="ai-time">0.0s</b></div>
+        </div>
+        <div id="ai-intent"></div>
+        <ol id="ai-plan"></ol>
+      </div>
+      <div id="log-wrap">
+        <div class="log-head">戦況ログ <button id="log-toggle" class="mini-btn">▾</button></div>
+        <div id="log"></div>
+      </div>
+    </div>
+
+    <div id="hand"></div>
+    <button id="end-turn"><span class="et-main">ターン終了</span><span class="et-sub">Enter</span></button>
+
+    <div id="cam-buttons">
+      <button class="icon-btn" id="cam-left" title="視点を左に回転 (Q)">⟲</button>
+      <button class="icon-btn" id="cam-top" title="真上から見る (T)">⊙</button>
+      <button class="icon-btn" id="cam-reset" title="視点をリセット (R)">⌂</button>
+      <button class="icon-btn" id="cam-right" title="視点を右に回転 (E)">⟳</button>
+    </div>
+    <div id="cam-help">右ドラッグ: 回転 / ホイール: ズーム / 中ドラッグ: 移動</div>
+
+    <div id="inspector" class="hidden"></div>
+    <div id="tooltip" class="hidden"></div>
+    <div id="banner"></div>
+    <div id="played-card"></div>
+    <div id="dir-picker" class="hidden"></div>
+    <div id="toast"></div>
+  </div>
+
+  <!-- ===================== タイトル画面 ===================== -->
+  <div id="title-screen" class="hidden">
+    <div class="title-logo">
+      <div class="logo-en">ARCANA FIELD</div>
+      <div class="logo-jp">アルカナ・フィールド</div>
+      <div class="logo-sub">― 動く大地のカードバトル ―</div>
+    </div>
+    <div class="title-body">
+      <section>
+        <h3>対戦モード</h3>
+        <div class="opt-row" id="opt-mode">
+          <button data-v="vsai" class="sel">AI と対戦</button>
+          <button data-v="watch">AI 同士を観戦</button>
+        </div>
+      </section>
+      <section>
+        <h3 id="lbl-my-faction">あなたの勢力</h3>
+        <div class="faction-row" id="opt-faction"></div>
+      </section>
+      <section class="two-col">
+        <div>
+          <h3 id="lbl-ai-faction">相手の勢力</h3>
+          <div class="opt-row" id="opt-ai-faction"></div>
+        </div>
+        <div>
+          <h3>AI の強さ</h3>
+          <div class="opt-row" id="opt-diff"></div>
+        </div>
+      </section>
+      <section class="two-col">
+        <div>
+          <h3>戦場</h3>
+          <div class="opt-row wrap" id="opt-map"></div>
+        </div>
+        <div>
+          <h3>手番</h3>
+          <div class="opt-row" id="opt-first">
+            <button data-v="random" class="sel">ランダム</button>
+            <button data-v="0">先攻</button>
+            <button data-v="1">後攻</button>
+          </div>
+        </div>
+      </section>
+      <div class="title-actions">
+        <button id="btn-start" class="big-btn">戦いを始める</button>
+        <button id="btn-title-rules" class="ghost-btn">遊び方</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== モーダル ===================== -->
+  <div id="modal-rules" class="modal hidden">
+    <div class="modal-box rules">
+      <button class="modal-close">✕</button>
+      <h2>遊び方</h2>
+      <div class="rules-body">
+        <h4>🎯 勝利条件</h4>
+        <p>相手の<b>将 (リーダー)</b> の HP (初期18) を 0 にすれば勝利。将も盤上で移動・攻撃できるが、倒されると即敗北する。</p>
+        <h4>🔄 ターンの流れ</h4>
+        <ol>
+          <li>ターン開始時、最大マナ+1 (上限10) してマナが全回復し、カードを1枚引く。</li>
+          <li>マナを払ってカードを使う。ユニットは自陣 (手前2列) か将の周囲8マスに召喚できる。</li>
+          <li>各ユニットは1ターンに<b>移動1回・攻撃1回</b>。攻撃するとそのターンはもう動けない。</li>
+          <li>召喚したユニットは次のターンから行動できる (<b>突撃</b>持ちを除く)。</li>
+        </ol>
+        <h4>⚔ 戦闘</h4>
+        <ul>
+          <li>攻撃された側が生き残り、相手が射程内なら<b>反撃</b>する。遠隔ユニットは近接ユニットから反撃されない。</li>
+          <li><b>高所から攻撃</b>するとダメージ+1。高さ2以上の遠隔ユニットは射程+1。</li>
+          <li>高低差2以上の崖は登れない (飛行は無視)。1段登るには移動力が1余分に必要。</li>
+        </ul>
+        <h4>🏰 侵攻</h4>
+        <p>自分のターン開始時、<b>敵陣 (相手側の奥2列)</b> にいる自軍ユニット1体につき、敵の将に1ダメージを与える。守りを固めるだけでは勝てない。</p>
+        <h4>🗺 地形</h4>
+        <ul>
+          <li><b class="tr-forest">森</b> 移動コスト2。遠隔攻撃のダメージ-1。</li>
+          <li><b class="tr-water">水辺</b> 移動コスト2。地上ユニットの攻撃力-1。</li>
+          <li><b class="tr-lava">溶岩</b> 自分のターン終了時に2ダメージ (飛行・耐火は無効)。</li>
+          <li><b class="tr-crystal">マナ結晶</b> ターン開始時に自軍ユニットが乗っているとマナ+1。</li>
+          <li><b class="tr-shrine">聖域</b> ターン開始時に乗っている自軍ユニットのHP+2。</li>
+        </ul>
+        <h4>🌋 動く大地</h4>
+        <ul>
+          <li><b>地形カード</b>で大地を隆起・沈降させたり、行をずらしたり、3x3の区画を回転させたりできる。上に乗ったユニットも一緒に動く。</li>
+          <li>3ラウンドごとに<b>地殻変動</b>が起こり、中央の8マスが時計回りに回転するか、大地が隆起・沈降する。</li>
+        </ul>
+        <h4>✨ 英雄の力</h4>
+        <p>各勢力の将は2マナで1ターンに1回「英雄の力」を使える (自分のパネルのボタン)。</p>
+        <h4>🧠 AI について</h4>
+        <p>AI は盤面を評価関数で数値化し、ビームサーチで数百〜数千通りの手順を読み、さらに「達人」はあなたの応手まで読んで手を選ぶ。右上のパネルで AI の思考の様子が見られる。「💡助言」を押すとAIがあなたの最善手を提案する。</p>
+        <h4>🖱 操作</h4>
+        <ul>
+          <li>左クリック: ユニット選択 / 移動 / 攻撃 / カード使用。右クリック・Esc: キャンセル</li>
+          <li>右ドラッグ: 視点回転、ホイール: ズーム、中ドラッグ: 平行移動</li>
+          <li>Q / E: 90度回転、T: 真上、R: リセット、Enter: ターン終了、H: 助言、V: 脅威表示、1〜9: 手札選択</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-settings" class="modal hidden">
+    <div class="modal-box settings">
+      <button class="modal-close">✕</button>
+      <h2>設定</h2>
+      <label class="set-row"><span>効果音</span><input type="checkbox" id="set-sound" checked></label>
+      <label class="set-row"><span>BGM</span><input type="checkbox" id="set-music" checked></label>
+      <label class="set-row"><span>音量</span><input type="range" id="set-volume" min="0" max="1" step="0.05" value="0.5"></label>
+      <label class="set-row"><span>演出速度</span>
+        <select id="set-speed"><option value="1">標準</option><option value="1.5">速い</option><option value="2.2">とても速い</option></select></label>
+      <label class="set-row"><span>画質</span>
+        <select id="set-quality"><option value="high">高 (ブルーム・影)</option><option value="low">低 (軽量)</option></select></label>
+      <label class="set-row"><span>AI の行動にカメラを寄せる</span><input type="checkbox" id="set-follow" checked></label>
+      <label class="set-row"><span>AI の思考を盤上に表示</span><input type="checkbox" id="set-gaze" checked></label>
+    </div>
+  </div>
+
+  <div id="gameover" class="modal hidden">
+    <div class="modal-box gameover-box">
+      <div id="go-title"></div>
+      <div id="go-sub"></div>
+      <div id="go-stats"></div>
+      <div class="go-actions">
+        <button id="go-again" class="big-btn">もう一度</button>
+        <button id="go-title-btn" class="ghost-btn">タイトルへ</button>
+        <button id="go-view" class="ghost-btn">盤面を見る</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="loading"><div class="ld-ring"></div><div class="ld-text">大地を生成中…</div></div>
+
+  <noscript>このゲームを遊ぶには JavaScript を有効にしてください。</noscript>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

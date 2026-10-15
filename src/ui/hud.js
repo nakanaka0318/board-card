@@ -1,0 +1,402 @@
+// HTML オーバーレイ (パネル・手札・ログ・AI 思考パネルなど)
+import { CARDS, FACTIONS, TERRAIN } from '../engine/cards.js';
+import { canPlay, canHero, TECTONIC_PERIOD, coordName, has } from '../engine/rules.js';
+import { renderCard, el, keywordHelp, cardBack } from './cardview.js';
+import { cardArt } from '../render/cardart.js';
+import { TEAM_COLORS } from '../render/view.js';
+
+const $ = (id) => document.getElementById(id);
+
+export class HUD {
+  constructor() {
+    this.root = $('ui');
+    this.hand = $('hand');
+    this.log = $('log');
+    this.handCards = new Map();
+    this.hoverCb = null;
+    this.names = ['あなた', 'AI'];
+    this.prevHp = [null, null];
+    window.addEventListener('resize', () => { if (this.handArgs) this.renderHand(...this.handArgs); });
+    $('log-toggle').onclick = () => {
+      this.log.classList.toggle('collapsed');
+      $('log-toggle').textContent = this.log.classList.contains('collapsed') ? '▸' : '▾';
+    };
+  }
+
+  show(on) { this.root.classList.toggle('hidden', !on); }
+
+  // ------------------------------------------------------------
+  // プレイヤーパネル
+  // ------------------------------------------------------------
+
+  setupPanels(state, names, handlers) {
+    this.names = names;
+    this.handlers = handlers;
+    for (let p = 0; p < 2; p++) {
+      const f = state.players[p].faction;
+      const F = FACTIONS[f];
+      const panel = $('panel-' + p);
+      panel.style.setProperty('--team', TEAM_COLORS[p]);
+      panel.innerHTML = '';
+      const portrait = el('div', 'pp-portrait');
+      const art = cardArt('leader_' + f);
+      if (art) portrait.style.backgroundImage = `url(${art})`;
+      portrait.appendChild(el('span', 'pp-emblem', F.emblem));
+      panel.appendChild(portrait);
+      const name = el('div', 'pp-name', `${names[p]} <small>${F.name}</small>`);
+      panel.appendChild(name);
+      const hp = el('div', 'pp-hp');
+      hp.innerHTML = '<div class="pp-hp-ghost"></div><div class="pp-hp-fill"></div><div class="pp-hp-text"></div>';
+      panel.appendChild(hp);
+      panel.appendChild(el('div', 'pp-mana'));
+      const meta = el('div', 'pp-meta');
+      meta.innerHTML = `<span>手札 <b class="m-hand">0</b></span><span>山札 <b class="m-deck">0</b></span>`;
+      const isHuman = handlers.isHuman(p);
+      if (isHuman) {
+        const hb = el('button', 'hero-btn', `<span class="hb-cost">${F.hero.cost}</span>${F.hero.name}`);
+        hb.title = `英雄の力: ${F.hero.text}`;
+        hb.onclick = () => handlers.onHero();
+        meta.appendChild(hb);
+      } else {
+        meta.appendChild(el('span', 'hero-label', `英雄の力: ${F.hero.name}`)).title = F.hero.text;
+      }
+      panel.appendChild(meta);
+      panel.onmouseenter = () => this.showLeaderInfo(state, p);
+      panel.onmouseleave = () => this.hideInspector();
+    }
+    this.prevHp = [null, null];
+  }
+
+  showLeaderInfo(state, p) {
+    const f = state.players[p].faction;
+    const F = FACTIONS[f];
+    this.inspectorHtml(`<div class="ins-name">${F.name}</div><div class="ins-sub">${this.names[p]}の陣営</div>
+      <div class="ins-line">${F.desc}</div>
+      <div class="ins-line"><b>英雄の力「${F.hero.name}」</b> (${F.hero.cost}マナ)<br>${F.hero.text}</div>`);
+  }
+
+  setHp(p, hp, max) {
+    const panel = $('panel-' + p);
+    const fill = panel.querySelector('.pp-hp-fill');
+    const ghost = panel.querySelector('.pp-hp-ghost');
+    const pct = Math.max(0, hp / max) * 100;
+    fill.style.width = pct + '%';
+    ghost.style.width = pct + '%';
+    fill.classList.toggle('low', hp <= max * 0.3);
+    panel.querySelector('.pp-hp-text').textContent = `${Math.max(0, hp)} / ${max}`;
+  }
+
+  setMana(p, mana, max) {
+    const box = $('panel-' + p).querySelector('.pp-mana');
+    box.innerHTML = '';
+    const slots = Math.max(max, mana);
+    for (let i = 0; i < Math.min(12, slots); i++) {
+      const g = el('div', 'gem');
+      if (i < mana) g.classList.add(i >= max ? 'bonus' : 'full');
+      box.appendChild(g);
+    }
+    box.appendChild(el('span', 'pp-mana-text', `${mana}/${max}`));
+  }
+
+  refresh(state, ctx) {
+    const { humanTurn, selectedHand, heroArmed, aiThinking } = ctx;
+    for (let p = 0; p < 2; p++) {
+      const pl = state.players[p];
+      const L = state.units.find((u) => u.uid === pl.leader);
+      this.setHp(p, L ? L.hp : 0, L ? L.maxHp : 20);
+      this.setMana(p, pl.mana, pl.maxMana);
+      const panel = $('panel-' + p);
+      panel.querySelector('.m-hand').textContent = pl.hand.length;
+      panel.querySelector('.m-deck').textContent = pl.deck.length;
+      panel.classList.toggle('active', state.current === p && state.winner === null);
+      const hb = panel.querySelector('.hero-btn');
+      if (hb) {
+        hb.disabled = !(humanTurn && state.current === p && canHero(state, p));
+        hb.classList.toggle('armed', !!heroArmed);
+      }
+    }
+    const tl = $('turn-label');
+    const cur = state.current;
+    if (state.winner !== null) { tl.textContent = '決着'; tl.className = ''; }
+    else {
+      tl.textContent = ctx.watch ? `${this.names[cur]} のターン` : cur === ctx.human ? 'あなたのターン' : (aiThinking ? 'AI 思考中…' : 'AI のターン');
+      tl.className = cur === 0 ? 'me' : 'ai';
+    }
+    $('round-label').textContent = `ラウンド ${state.round} ・ ターン ${state.turn}`;
+    const tec = $('tectonic');
+    const nextKind = state.tectonicCount % 2 === 0 ? '中央回転' : '隆起と沈降';
+    const left = state.round <= 1 ? TECTONIC_PERIOD : state.tectonicIn;
+    tec.textContent = `⛰ 地殻変動 (${nextKind}) まで ${left} ラウンド`;
+    tec.classList.toggle('soon', left <= 1);
+    // 相手の手札
+    const eh = $('enemy-hand');
+    const opp = ctx.watch ? 1 : 1 - ctx.human;
+    const oppHand = state.players[opp].hand.length;
+    if (eh.childElementCount !== oppHand) {
+      const before = eh.childElementCount;
+      eh.innerHTML = '';
+      for (let i = 0; i < oppHand; i++) {
+        const b = cardBack(state.players[opp].faction);
+        if (i >= before) b.classList.add('new');
+        eh.appendChild(b);
+      }
+    }
+    // 手札
+    const viewer = ctx.watch ? null : ctx.human;
+    if (viewer !== null) this.renderHand(state, viewer, { humanTurn, selectedHand });
+    else { this.hand.innerHTML = ''; this.handCards.clear(); this.handArgs = null; }
+    // ターン終了ボタン
+    const et = $('end-turn');
+    et.disabled = !humanTurn;
+    et.classList.toggle('ready', !!(humanTurn && ctx.noMoves));
+  }
+
+  renderHand(state, p, { humanTurn, selectedHand }) {
+    this.handArgs = [state, p, { humanTurn, selectedHand }];
+    const pl = state.players[p];
+    const keep = new Set(pl.hand.map((h) => h.uid));
+    for (const [uid, elx] of this.handCards) if (!keep.has(uid)) { elx.remove(); this.handCards.delete(uid); }
+    const n = pl.hand.length;
+    const width = this.hand.clientWidth || 600;
+    const cw = window.innerWidth < 820 ? 92 : 128;
+    const spacing = Math.min(cw - 10, (width - cw - 60) / Math.max(1, n - 1));
+    pl.hand.forEach((h, i) => {
+      let c = this.handCards.get(h.uid);
+      if (!c) {
+        c = renderCard(h.cardId);
+        c.classList.add('drawn');
+        c.dataset.uid = h.uid;
+        c.addEventListener('mouseenter', () => { c.dataset.hover = '1'; this.layoutHand(); if (this.hoverCb) this.hoverCb(h.uid, true); });
+        c.addEventListener('mouseleave', () => { c.dataset.hover = ''; this.layoutHand(); if (this.hoverCb) this.hoverCb(h.uid, false); });
+        c.addEventListener('click', (e) => { e.stopPropagation(); if (this.clickCb) this.clickCb(h.uid); });
+        const key = el('div', 'c-key', String(i + 1));
+        c.appendChild(key);
+        this.hand.appendChild(c);
+        this.handCards.set(h.uid, c);
+        setTimeout(() => c.classList.remove('drawn'), 700);
+      }
+      c.querySelector('.c-key').textContent = i < 9 ? String(i + 1) : '';
+      c.dataset.index = i;
+      c.dataset.n = n;
+      c.dataset.spacing = spacing;
+      const playable = humanTurn && canPlay(state, p, h);
+      c.classList.toggle('playable', playable);
+      c.classList.toggle('unplayable', !playable);
+      c.classList.toggle('selected', selectedHand === h.uid);
+    });
+    this.hand.classList.toggle('disabled', !humanTurn);
+    this.layoutHand();
+  }
+
+  layoutHand() {
+    const cards = [...this.handCards.values()];
+    const anyHover = cards.some((c) => c.dataset.hover === '1');
+    const base = window.innerWidth < 820 ? 0.72 : 1;
+    for (const c of cards) {
+      const i = +c.dataset.index, n = +c.dataset.n, sp = +c.dataset.spacing;
+      const off = i - (n - 1) / 2;
+      const hover = c.dataset.hover === '1';
+      const sel = c.classList.contains('selected');
+      let x = off * sp - 64;
+      let rot = off * 3.2;
+      let y = Math.abs(off) * Math.abs(off) * 2.2 + (1 - base) * 70;
+      let scale = base;
+      if (hover || sel) { rot = 0; y = base < 1 ? -60 : -110; scale = 1.42 * base; }
+      else if (anyHover) {
+        const hi = cards.find((k) => k.dataset.hover === '1');
+        const d = i - +hi.dataset.index;
+        x += Math.sign(d) * 40 / Math.max(1, Math.abs(d));
+      }
+      c.style.transform = `translate(${x}px, ${y}px) rotate(${rot}deg) scale(${scale})`;
+      c.style.zIndex = hover ? 100 : sel ? 90 : 10 + i;
+    }
+  }
+
+  // ------------------------------------------------------------
+  // ログ
+  // ------------------------------------------------------------
+
+  addLog(html, cls = '') {
+    const d = el('div', 'l ' + cls, html);
+    this.log.appendChild(d);
+    while (this.log.childElementCount > 160) this.log.firstChild.remove();
+    this.log.scrollTop = this.log.scrollHeight;
+  }
+
+  clearLog() { this.log.innerHTML = ''; }
+
+  // ------------------------------------------------------------
+  // AI パネル
+  // ------------------------------------------------------------
+
+  aiReset(title, diffName) {
+    $('ai-title').textContent = title;
+    $('ai-diff').textContent = diffName || '';
+    $('ai-panel').className = '';
+    $('ai-status').textContent = '待機中';
+    $('ai-evals').textContent = '0';
+    $('ai-depth').textContent = '0';
+    $('ai-time').textContent = '0.0s';
+    $('ai-intent').innerHTML = '';
+    $('ai-plan').innerHTML = '';
+  }
+
+  aiThinking(on, label = '盤面を読んでいます…', mode = 'thinking') {
+    $('ai-panel').className = on ? mode : '';
+    $('ai-status').textContent = label;
+  }
+
+  aiProgress({ evaluated, depth, time, plan }) {
+    $('ai-evals').textContent = evaluated.toLocaleString();
+    $('ai-depth').textContent = depth < 0 ? '応手' : String(depth);
+    $('ai-time').textContent = (time / 1000).toFixed(1) + 's';
+    if (plan) this.aiPlan(plan, -1);
+  }
+
+  aiPlan(lines, current) {
+    const ol = $('ai-plan');
+    ol.innerHTML = '';
+    lines.forEach((t, i) => {
+      const li = el('li', i < current ? 'done' : i === current ? 'now' : '', t);
+      ol.appendChild(li);
+    });
+    const now = ol.querySelector('.now');
+    if (now) now.scrollIntoView({ block: 'nearest' });
+  }
+
+  aiIntent(tag, text) {
+    $('ai-intent').innerHTML = tag ? `<span class="tag t-${tag}">${tag}</span>${text}` : '';
+  }
+
+  setBalance(prob, names) {
+    document.querySelector('.bal-fill').style.width = (prob * 100).toFixed(1) + '%';
+    if (names) {
+      document.querySelector('.bal-l').textContent = names[0];
+      document.querySelector('.bal-r').textContent = names[1];
+    }
+  }
+
+  // ------------------------------------------------------------
+  // インスペクタ・ツールチップ
+  // ------------------------------------------------------------
+
+  inspectorHtml(html, team) {
+    const ins = $('inspector');
+    ins.innerHTML = html;
+    if (team) ins.style.setProperty('--team', team);
+    ins.classList.remove('hidden');
+  }
+
+  hideInspector() { $('inspector').classList.add('hidden'); }
+
+  inspectUnit(state, u, names) {
+    const c = CARDS[u.cardId];
+    const t = state.tiles[u.y * 7 + u.x];
+    const art = cardArt(u.cardId);
+    const chips = [];
+    if (u.frozen) chips.push('<span class="chip ice">凍結中</span>');
+    if (u.sick && !u.leader) chips.push('<span class="chip warn">召喚酔い (次ターンから行動)</span>');
+    if (u.owner === state.current && !u.sick && !u.frozen) {
+      if (!u.moved) chips.push('<span class="chip ok">移動可</span>');
+      if (!u.attacked) chips.push('<span class="chip ok">攻撃可</span>');
+      if (u.moved && u.attacked) chips.push('<span class="chip">行動済み</span>');
+    }
+    const lines = keywordHelp(u.cardId).map((s) => `<div class="ins-line">${s}</div>`).join('');
+    const text = c.text && c.type !== 'leader' ? `<div class="ins-line">${c.text}</div>` : '';
+    const atkNote = u.atk !== c.atk ? ` <small>(基本${c.atk})</small>` : '';
+    const name = u.leader ? `${FACTIONS[c.faction].name}の将` : c.name;
+    const tr = TERRAIN[t.terrain];
+    let tileNote = '';
+    if (t.terrain === 'water' && !has(u, 'flying')) tileNote = ' <span class="chip warn">攻撃-1</span>';
+    if (t.terrain === 'lava' && !has(u, 'flying') && !has(u, 'lavaWalk')) tileNote = ' <span class="chip warn">ターン終了時2ダメージ</span>';
+    if (t.terrain === 'forest' && has(u, 'forestKin')) tileNote = ' <span class="chip ok">攻撃+1</span>';
+    this.inspectorHtml(`
+      <div class="ins-head"><div class="ins-art" style="background-image:url(${art || ''})"></div>
+      <div><div class="ins-name">${name}</div><div class="ins-sub">${names[u.owner]} · ${coordName(u.x, u.y)}</div></div></div>
+      <div class="ins-stats"><span>⚔ ${u.atk}${atkNote}</span><span>❤ ${u.hp}/${u.maxHp}</span><span>👣 ${u.move}</span><span>🎯 ${u.range}</span></div>
+      <div class="ins-status">${chips.join('')}</div>
+      ${text}${lines}
+      <div class="ins-tile">足場: <b>${tr.name}</b> (高さ${t.height})${tileNote}<br>${tr.desc}</div>`, TEAM_COLORS[u.owner]);
+  }
+
+  inspectTile(state, x, y) {
+    const t = state.tiles[y * 7 + x];
+    const tr = TERRAIN[t.terrain];
+    this.inspectorHtml(`<div class="ins-name">${tr.name}</div><div class="ins-sub">${coordName(x, y)} · 高さ ${t.height}</div>
+      <div class="ins-line">${tr.desc}</div>
+      <div class="ins-line" style="color:var(--muted)">高所から低所への攻撃はダメージ+1。高低差2以上は地上ユニットが登れない。</div>`);
+  }
+
+  inspectCard(cardId) {
+    const c = CARDS[cardId];
+    const lines = keywordHelp(cardId).map((s) => `<div class="ins-line">${s}</div>`).join('');
+    if (!lines) { this.hideInspector(); return; }
+    this.inspectorHtml(`<div class="ins-name">${c.name}</div><div class="ins-sub">キーワード解説</div>${lines}`);
+  }
+
+  tooltip(x, y, html) {
+    const t = $('tooltip');
+    if (!html) { t.classList.add('hidden'); return; }
+    t.innerHTML = html;
+    t.classList.remove('hidden');
+    const w = t.offsetWidth;
+    t.style.left = Math.min(x, window.innerWidth - w - 30) + 'px';
+    t.style.top = Math.min(y, window.innerHeight - 80) + 'px';
+  }
+
+  toast(msg, ms = 2200) {
+    const t = $('toast');
+    t.innerHTML = msg;
+    t.classList.add('show');
+    clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+  }
+
+  banner(main, sub, cls, ms = 1600) {
+    const b = $('banner');
+    b.className = '';
+    void b.offsetWidth;
+    b.innerHTML = `<div class="b-main">${main}</div>${sub ? `<div class="b-sub">${sub}</div>` : ''}`;
+    b.className = 'show ' + (cls || '');
+    return new Promise((r) => setTimeout(r, ms * 0.7));
+  }
+
+  showPlayedCard(cardId, p, who, speed = 1) {
+    const box = $('played-card');
+    box.innerHTML = '';
+    const c = renderCard(cardId);
+    c.classList.add('p' + p);
+    const label = el('div', 'pc-who', who);
+    label.style.color = TEAM_COLORS[p];
+    box.appendChild(label);
+    box.appendChild(c);
+    const dur = (p === 0 ? 800 : 1250) / speed;
+    c.style.animationDuration = dur + 'ms';
+    label.style.animationDuration = dur + 'ms';
+    setTimeout(() => { if (box.contains(c)) box.innerHTML = ''; }, dur + 50);
+    return new Promise((r) => setTimeout(r, dur * 0.55));
+  }
+
+  pickDirection(kind) {
+    const dp = $('dir-picker');
+    dp.classList.remove('hidden');
+    const opts = kind === 'row'
+      ? [['◀ 左へずらす', -1], ['右へずらす ▶', 1]]
+      : [['⟲ 反時計回り', -1], ['時計回り ⟳', 1]];
+    dp.innerHTML = `<h4>${kind === 'row' ? 'ずらす方向' : '回転の向き'}を選択</h4>`;
+    const row = el('div', 'dp-row');
+    dp.appendChild(row);
+    return new Promise((resolve) => {
+      const done = (v) => { dp.classList.add('hidden'); resolve(v); };
+      for (const [label, v] of opts) {
+        const b = el('button', '', label);
+        b.onclick = () => done(v);
+        row.appendChild(b);
+      }
+      const c = el('button', 'dp-cancel', 'キャンセル');
+      c.onclick = () => done(null);
+      dp.appendChild(c);
+      this.cancelDir = () => done(null);
+    });
+  }
+}
