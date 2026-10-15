@@ -385,15 +385,16 @@ export class HUD {
     ins.innerHTML = html;
     if (opts.detail) {
       const bar = el('div', 'ins-actions');
-      const d = el('button', 'ins-detail', 'ⓘ カード詳細');
+      const d = el('button', 'ins-detail', 'ⓘ 詳細');
       d.onclick = (e) => { e.stopPropagation(); opts.detail(); };
       bar.appendChild(d);
-      if (opts.pinned) {
-        const x = el('button', 'ins-close', '閉じる');
-        x.onclick = (e) => { e.stopPropagation(); this.hideInspector(true); };
-        bar.appendChild(x);
-      }
       ins.appendChild(bar);
+    }
+    if (opts.pinned) {
+      const x = el('button', 'ins-close', '✕');
+      x.setAttribute('aria-label', '閉じる');
+      x.onclick = (e) => { e.stopPropagation(); this.hideInspector(true); };
+      ins.appendChild(x);
     }
     if (team) ins.style.setProperty('--team', team);
     else ins.style.removeProperty('--team');

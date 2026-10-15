@@ -557,7 +557,11 @@ export class Game {
 
   trySelectUnit(u) {
     const s = this.state;
-    if (canMove(s, u) || (canAttack(s, u) && (targetsFrom(s, u, u.x, u.y).length || canMove(s, u)))) return this.selectUnit(u);
+    if (canMove(s, u) || (canAttack(s, u) && (targetsFrom(s, u, u.x, u.y).length || canMove(s, u)))) {
+      // 選択中は下の案内バーに情報が出るので、上の簡易表示は閉じる
+      this.hud.hideInspector(true);
+      return this.selectUnit(u);
+    }
     this.hud.toast(u.sick ? 'このユニットは召喚されたばかりで、次のターンから行動できます' : u.frozen ? 'このユニットは凍結しています' : 'このユニットは行動済みです');
     this.sfx('error');
     this.clearSelection();

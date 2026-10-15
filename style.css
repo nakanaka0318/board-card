@@ -630,9 +630,9 @@ button { font-family: inherit; cursor: pointer; }
 
 /* ---------------- 詳細表示・デッキ一覧 ---------------- */
 #inspector.pinned { pointer-events: auto; }
-#inspector .ins-actions { display: flex; gap: 6px; margin-top: 10px; }
+#inspector .ins-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
 #inspector .ins-actions button {
-  flex: 1;
+  flex: none;
   padding: 7px 8px;
   border-radius: 8px;
   border: 1px solid var(--line);
@@ -643,6 +643,19 @@ button { font-family: inherit; cursor: pointer; }
 }
 #inspector .ins-actions .ins-detail { border-color: var(--gold); color: var(--gold-2); }
 #inspector:not(.pinned) .ins-actions { display: none; }
+#inspector .ins-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: rgba(30, 22, 60, 0.9);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+}
 #inspector .ins-icon { display: flex; align-items: center; justify-content: center; font-size: 30px; }
 .card-link { color: var(--gold-2); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
 .card-link:hover { color: #fff; }
@@ -820,7 +833,21 @@ body.watch #hand, body.watch #end-turn, body.watch #btn-hint { display: none; }
   #ai-status { margin: 2px 0 0; font-size: 11px; }
   #ai-intent { margin-top: 3px; font-size: 11px; }
   #log-wrap, #ai-plan, .ai-meters { display: none; }
-  #inspector { left: 6px; right: 6px; top: 124px; width: auto; transform: none; max-height: 46%; overflow-y: auto; z-index: 30; }
+  #inspector { left: 6px; right: 6px; top: 124px; width: auto; transform: none; max-height: 30%; overflow-y: auto; z-index: 30; padding: 7px 10px 7px; font-size: 11px; border-radius: 12px; }
+  #inspector .ins-head { gap: 8px; padding-right: 34px; }
+  #inspector .ins-art { width: 34px; height: 34px; border-radius: 8px; border-width: 1.5px; }
+  #inspector .ins-icon { font-size: 20px; }
+  #inspector .ins-name { font-size: 14px; }
+  #inspector .ins-sub { font-size: 10px; }
+  #inspector .ins-stats { gap: 5px; margin: 5px 0 2px; font-size: 11px; }
+  #inspector .ins-stats span { padding: 1px 6px; }
+  #inspector .ins-status { margin-top: 3px; gap: 4px; }
+  #inspector .ins-line { margin-top: 3px; line-height: 1.4; }
+  #inspector .ins-tile { margin-top: 5px; padding-top: 5px; font-size: 10.5px; line-height: 1.4; }
+  #inspector .ins-actions { position: absolute; right: 8px; bottom: 7px; margin: 0; }
+  #inspector .ins-actions button { padding: 4px 9px; font-size: 11px; }
+  #inspector .ins-close { top: 5px; right: 5px; width: 26px; height: 26px; font-size: 12px; }
+  #inspector.pinned .ins-tile { padding-right: 64px; }
   #hand { width: 100%; left: 50%; min-width: 0; height: 150px; }
   #end-turn { bottom: 160px; right: 8px; width: 104px; height: 46px; }
   .et-main { font-size: 14px; }
@@ -874,9 +901,18 @@ body.watch #hand, body.watch #end-turn, body.watch #btn-hint { display: none; }
   #ai-status { margin: 2px 0 0; font-size: 10.5px; }
   #ai-intent { margin-top: 2px; font-size: 10.5px; }
   #log-wrap, #ai-plan, .ai-meters { display: none; }
-  #inspector { left: 4px; top: 74px; width: 230px; transform: none; max-height: calc(100% - 150px); overflow-y: auto; font-size: 11px; padding: 9px; z-index: 30; }
-  #inspector .ins-art { width: 44px; height: 44px; }
-  #inspector .ins-name { font-size: 14px; }
+  #inspector { left: 4px; top: 74px; width: 220px; transform: none; max-height: calc(100% - 150px); overflow-y: auto; font-size: 10.5px; padding: 7px 9px; z-index: 30; }
+  #inspector .ins-head { gap: 7px; padding-right: 30px; }
+  #inspector .ins-art { width: 32px; height: 32px; border-radius: 8px; }
+  #inspector .ins-name { font-size: 13px; }
+  #inspector .ins-sub { font-size: 9.5px; }
+  #inspector .ins-stats { gap: 4px; margin: 4px 0 2px; font-size: 10.5px; }
+  #inspector .ins-stats span { padding: 1px 5px; }
+  #inspector .ins-line { margin-top: 3px; line-height: 1.4; }
+  #inspector .ins-tile { margin-top: 4px; padding-top: 4px; font-size: 10px; }
+  #inspector .ins-actions { margin-top: 5px; }
+  #inspector .ins-actions button { padding: 3px 8px; font-size: 10.5px; }
+  #inspector .ins-close { top: 4px; right: 4px; width: 24px; height: 24px; font-size: 11px; }
   #hand { width: calc(100% - 360px); min-width: 260px; left: 50%; height: 112px; }
   #end-turn { bottom: 8px; right: 8px; width: 100px; height: 42px; }
   .et-main { font-size: 13px; }
