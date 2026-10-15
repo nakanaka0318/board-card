@@ -188,7 +188,13 @@ $('btn-start').onclick = startGame;
 $('btn-rules').onclick = () => $('modal-rules').classList.remove('hidden');
 $('btn-title-rules').onclick = () => $('modal-rules').classList.remove('hidden');
 $('btn-settings').onclick = () => $('modal-settings').classList.remove('hidden');
-$('btn-menu').onclick = () => { if (confirm('対局を終了してタイトルへ戻りますか?')) showTitle(); };
+// confirm() が使えない環境もあるため、2 回押しで確定する
+let exitArmed = 0;
+$('btn-menu').onclick = () => {
+  if (Date.now() - exitArmed < 3000) { exitArmed = 0; showTitle(); return; }
+  exitArmed = Date.now();
+  hud.toast('もう一度「終了」を押すとタイトルへ戻ります', 3000);
+};
 $('go-again').onclick = startGame;
 $('go-title-btn').onclick = showTitle;
 $('go-view').onclick = () => $('gameover').classList.add('hidden');

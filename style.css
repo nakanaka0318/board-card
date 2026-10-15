@@ -16,6 +16,7 @@
   --mana: #5aa8ff;
   --font: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", "Noto Sans JP", "Meiryo", sans-serif;
   --serif: "Shippori Mincho B1", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -36,7 +37,12 @@ button { font-family: inherit; cursor: pointer; }
 #scene { position: fixed; inset: 0; }
 #scene canvas { display: block; }
 
-#ui { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+#ui {
+  position: fixed;
+  inset: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  pointer-events: none;
+  z-index: 10;
+}
 #ui > * { pointer-events: auto; }
 #ui #banner, #ui #played-card, #ui #toast, #ui #tooltip, #ui #enemy-hand, #ui #cam-help { pointer-events: none; }
 
