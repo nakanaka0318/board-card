@@ -52,7 +52,53 @@ export class Sound {
 
   resume() {
     const c = this.ensure();
-    if (c && c.state === 'suspended') c.resume();
+    if (c && c.state !== 'running') c.resume().catch(() => {});
+  }
+
+  // ブラウザの自動再生制限を解除する。
+  // iOS はタッチの pointerdown をユーザー操作とみなさず、さらにマナーモード中は
+  // Web Audio が消音されるため、touchend/click で解除し、無音の <audio> を再生して
+  // オーディオセッションを「再生」カテゴリに切り替える。
+  installUnlock() {
+    const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const unlock = () => {
+      const c = this.ensure();
+      if (!c) return;
+      try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* 未対応 */ }
+      if (c.state !== 'running') c.resume().catch(() => {});
+      try {
+        const b = c.createBuffer(1, 1, 22050);
+        const src = c.createBufferSource();
+        src.buffer = b;
+        src.connect(c.destination);
+        src.start(0);
+      } catch { /* noop */ }
+      if (isIOS && this.enabled) {
+        if (!this.tag) {
+          this.tag = document.createElement('audio');
+          this.tag.src = silentWav();
+          this.tag.loop = true;
+          this.tag.setAttribute('playsinline', '');
+          this.tag.setAttribute('x-webkit-airplay', 'deny');
+        }
+        this.tag.play().catch(() => {});
+      }
+      if (c.state === 'running' && (!isIOS || (this.tag && !this.tag.paused))) {
+        for (const ev of EVENTS) window.removeEventListener(ev, unlock, true);
+        this.unlocked = true;
+      }
+    };
+    const EVENTS = ['touchend', 'click', 'keydown', 'pointerup'];
+    for (const ev of EVENTS) window.addEventListener(ev, unlock, true);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && this.ctx && this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
+    });
+  }
+
+  setEnabled(on) {
+    this.enabled = on;
+    if (this.tag) { if (on) this.tag.play().catch(() => {}); else this.tag.pause(); }
+    if (on) this.resume();
   }
 
   setVolume(v) { this.volume = v; if (this.master) this.master.gain.value = v; }
@@ -190,4 +236,20 @@ export class Sound {
     play();
     this.musicTimer = setInterval(play, 6500);
   }
+}
+
+// 0.5 秒の無音 WAV (8kHz / 8bit / モノラル) の data URI
+function silentWav() {
+  const n = 4000;
+  const buf = new Uint8Array(44 + n);
+  const dv = new DataView(buf.buffer);
+  const str = (o, t) => { for (let i = 0; i < t.length; i++) buf[o + i] = t.charCodeAt(i); };
+  str(0, 'RIFF'); dv.setUint32(4, 36 + n, true); str(8, 'WAVE'); str(12, 'fmt ');
+  dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+  dv.setUint32(24, 8000, true); dv.setUint32(28, 8000, true); dv.setUint16(32, 1, true); dv.setUint16(34, 8, true);
+  str(36, 'data'); dv.setUint32(40, n, true);
+  buf.fill(128, 44);
+  let bin = '';
+  for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+  return 'data:audio/wav;base64,' + btoa(bin);
 }

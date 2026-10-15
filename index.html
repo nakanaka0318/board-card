@@ -34,8 +34,10 @@
 
     <div id="menu-buttons">
       <button class="icon-btn" id="btn-hint" title="AI に次の一手を相談する (H)">💡<span>助言</span></button>
+      <button class="icon-btn" id="btn-deck" title="デッキのカード一覧 (D)">🃏<span>デッキ</span></button>
       <button class="icon-btn" id="btn-threat" title="敵が次のターンに攻撃できる範囲を表示 (V)">👁<span>脅威</span></button>
       <button class="icon-btn" id="btn-rules" title="遊び方">📖<span>遊び方</span></button>
+      <button class="icon-btn" id="btn-sound" title="音のオン/オフ (M)">🔊<span>音</span></button>
       <button class="icon-btn" id="btn-settings" title="設定">⚙<span>設定</span></button>
       <button class="icon-btn" id="btn-menu" title="タイトルへ戻る">⏻<span>終了</span></button>
     </div>
@@ -124,6 +126,7 @@
       </section>
       <div class="title-actions">
         <button id="btn-start" class="big-btn">戦いを始める</button>
+        <button id="btn-title-deck" class="ghost-btn">カード一覧</button>
         <button id="btn-title-rules" class="ghost-btn">遊び方</button>
       </div>
     </div>
@@ -165,6 +168,8 @@
           <li><b>地形カード</b>で大地を隆起・沈降させたり、行をずらしたり、3x3の区画を回転させたりできる。上に乗ったユニットも一緒に動く。</li>
           <li>3ラウンドごとに<b>地殻変動</b>が起こり、中央の8マスが時計回りに回転するか、大地が隆起・沈降する。</li>
         </ul>
+        <h4>📘 キーワード能力</h4>
+        <dl class="kw-list" id="kw-glossary"></dl>
         <h4>✨ 英雄の力</h4>
         <p>各勢力の将は2マナで1ターンに1回「英雄の力」を使える (自分のパネルのボタン)。</p>
         <h4>🧠 AI について</h4>
@@ -172,10 +177,31 @@
         <h4>🖱 操作</h4>
         <ul>
           <li>左クリック: ユニット選択 / 移動 / 攻撃 / カード使用。右クリック・Esc: キャンセル</li>
+          <li>カードやユニットの詳細: PC は右クリック、スマホは長押し (タップすると下に概要)。戦況ログのカード名も押せる</li>
           <li>右ドラッグ: 視点回転、ホイール: ズーム、中ドラッグ: 平行移動</li>
-          <li>Q / E: 90度回転、T: 真上、R: リセット、Enter: ターン終了、H: 助言、V: 脅威表示、1〜9: 手札選択</li>
+          <li>Q / E: 90度回転、T: 真上、R: リセット、Enter: ターン終了、H: 助言、V: 脅威表示、D: デッキ、M: 音、1〜9: 手札選択</li>
         </ul>
       </div>
+    </div>
+  </div>
+
+  <div id="modal-card" class="modal hidden">
+    <div class="modal-box card-detail">
+      <button class="modal-close">✕</button>
+      <div class="cd-body">
+        <div class="cd-card"></div>
+        <div class="cd-info"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-deck" class="modal hidden">
+    <div class="modal-box deck-box">
+      <button class="modal-close">✕</button>
+      <h2>デッキ</h2>
+      <div class="deck-tabs" id="deck-tabs"></div>
+      <div class="deck-summary" id="deck-summary"></div>
+      <div class="deck-grid" id="deck-grid"></div>
     </div>
   </div>
 

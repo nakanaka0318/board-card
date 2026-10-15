@@ -9,6 +9,7 @@ import { MAP_LIST } from './engine/maps.js';
 import { DIFFICULTY } from './engine/ai.js';
 import { cardArt } from './render/cardart.js';
 import { el } from './ui/cardview.js';
+import { openDeckViewer, fillGlossary } from './ui/cardinfo.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -153,7 +154,8 @@ function startGame() {
 // ---------------- 入力の配線 ----------------
 view.on('hover', (hit, e) => { if (game) game.onHover(hit, e); });
 view.on('click', (hit, e) => { sound.resume(); if (game) game.onClick(hit, e); });
-view.on('rightclick', () => { if (game) game.onRightClick(); });
+view.on('rightclick', (hit) => { if (game) game.onRightClick(hit); });
+view.on('longpress', (hit) => { if (game) game.onLongPress(hit); });
 view.on('frame', (dt) => {
   if (titleSpin) {
     const c = view.controls;
@@ -168,8 +170,9 @@ view.on('frame', (dt) => {
 window.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
   const k = e.key.toLowerCase();
-  const openModal = [...document.querySelectorAll('.modal')].find((m) => !m.classList.contains('hidden') && m.id !== 'gameover');
+  const openModal = [...document.querySelectorAll('.modal')].reverse().find((m) => !m.classList.contains('hidden') && m.id !== 'gameover');
   if (openModal) { if (k === 'escape') openModal.classList.add('hidden'); return; }
+  if (k === 'm') { toggleSound(); return; }
   if (k === 'q') view.rotateView(-1);
   else if (k === 'e') view.rotateView(1);
   else if (k === 'r') view.resetView();
@@ -185,6 +188,30 @@ $('cam-right').onclick = () => view.rotateView(1);
 $('cam-reset').onclick = () => view.resetView();
 $('cam-top').onclick = () => view.resetView(true);
 $('btn-start').onclick = startGame;
+function titleDeck() {
+  const ids = Object.keys(FACTIONS);
+  openDeckViewer(ids.map((f) => ({ label: FACTIONS[f].name, faction: f })), Math.max(0, ids.indexOf(choice.faction)));
+}
+$('btn-title-deck').onclick = titleDeck;
+$('btn-deck').onclick = () => (game ? game.openDeck() : titleDeck());
+function toggleSound() {
+  settings.sound = !settings.sound;
+  settings.music = settings.sound;
+  $('set-sound').checked = settings.sound;
+  $('set-music').checked = settings.music;
+  sound.setEnabled(settings.sound);
+  sound.musicOn = settings.music;
+  if (settings.sound) { sound.startMusic(); sound.play('select'); }
+  updateSoundBtn();
+  saveSettings();
+  hud.toast(settings.sound ? '🔊 音をオンにしました (iPhone はマナーモードでも鳴ります)' : '🔇 音をオフにしました');
+}
+function updateSoundBtn() {
+  const b = $('btn-sound');
+  b.innerHTML = settings.sound ? '🔊<span>音</span>' : '🔇<span>音</span>';
+  b.classList.toggle('on', settings.sound);
+}
+$('btn-sound').onclick = toggleSound;
 $('btn-rules').onclick = () => $('modal-rules').classList.remove('hidden');
 $('btn-title-rules').onclick = () => $('modal-rules').classList.remove('hidden');
 $('btn-settings').onclick = () => $('modal-settings').classList.remove('hidden');
@@ -208,7 +235,7 @@ document.querySelectorAll('.modal').forEach((m) => {
 function bindSettings() {
   const s = settings;
   const sync = () => {
-    sound.enabled = s.sound;
+    sound.setEnabled(s.sound);
     sound.musicOn = s.music;
     sound.setVolume(s.volume);
     view.anim.speed = s.speed;
@@ -221,7 +248,7 @@ function bindSettings() {
   $('set-quality').value = s.quality;
   $('set-follow').checked = s.follow;
   $('set-gaze').checked = s.gaze;
-  $('set-sound').onchange = (e) => { s.sound = e.target.checked; sync(); saveSettings(); };
+  $('set-sound').onchange = (e) => { s.sound = e.target.checked; sync(); saveSettings(); updateSoundBtn(); };
   $('set-music').onchange = (e) => { s.music = e.target.checked; sync(); saveSettings(); if (s.music) sound.startMusic(); };
   $('set-volume').oninput = (e) => { s.volume = +e.target.value; sync(); saveSettings(); };
   $('set-speed').onchange = (e) => { s.speed = +e.target.value; sync(); saveSettings(); };
@@ -243,12 +270,14 @@ async function boot() {
     }
   }
   bindSettings();
+  updateSoundBtn();
+  fillGlossary();
   buildTitle();
   showTitle();
   $('loading').classList.add('done');
   setTimeout(() => $('loading').remove(), 800);
   // 初回操作で音声を有効化
-  window.addEventListener('pointerdown', () => sound.resume(), { once: true });
+  sound.installUnlock();
 }
 
 boot().catch((e) => {

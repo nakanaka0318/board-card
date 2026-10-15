@@ -1,7 +1,8 @@
 // HTML オーバーレイ (パネル・手札・ログ・AI 思考パネルなど)
-import { CARDS, FACTIONS, TERRAIN } from '../engine/cards.js';
+import { CARDS, FACTIONS, TERRAIN, typeName } from '../engine/cards.js';
 import { canPlay, canHero, TECTONIC_PERIOD, coordName, has } from '../engine/rules.js';
-import { renderCard, el, keywordHelp, cardBack } from './cardview.js';
+import { renderCard, el, keywordHelp, cardBack, factionName } from './cardview.js';
+import { showCardDetail, onLongPress, targetText } from './cardinfo.js';
 import { cardArt } from '../render/cardart.js';
 import { TEAM_COLORS } from '../render/view.js';
 
@@ -17,6 +18,11 @@ export class HUD {
     this.names = ['あなた', 'AI'];
     this.prevHp = [null, null];
     window.addEventListener('resize', () => { if (this.handArgs) this.renderHand(...this.handArgs); });
+    // 戦況ログのカード名を押すと詳細
+    this.log.addEventListener('click', (e) => {
+      const a = e.target.closest('.card-link');
+      if (a) showCardDetail(a.dataset.card);
+    });
     $('log-toggle').onclick = () => {
       this.log.classList.toggle('collapsed');
       $('log-toggle').textContent = this.log.classList.contains('collapsed') ? '▸' : '▾';
@@ -158,7 +164,7 @@ export class HUD {
     for (const [uid, elx] of this.handCards) if (!keep.has(uid)) { elx.remove(); this.handCards.delete(uid); }
     const n = pl.hand.length;
     const width = this.hand.clientWidth || 600;
-    const cw = window.innerWidth < 820 ? 92 : 128;
+    const cw = 128 * handScale();
     const spacing = Math.min(cw - 10, (width - cw - 60) / Math.max(1, n - 1));
     pl.hand.forEach((h, i) => {
       let c = this.handCards.get(h.uid);
@@ -169,6 +175,9 @@ export class HUD {
         c.addEventListener('mouseenter', () => { c.dataset.hover = '1'; this.layoutHand(); if (this.hoverCb) this.hoverCb(h.uid, true); });
         c.addEventListener('mouseleave', () => { c.dataset.hover = ''; this.layoutHand(); if (this.hoverCb) this.hoverCb(h.uid, false); });
         c.addEventListener('click', (e) => { e.stopPropagation(); if (this.clickCb) this.clickCb(h.uid); });
+        // 長押し・右クリックで詳細
+        onLongPress(c, () => { c.dataset.hover = ''; this.layoutHand(); showCardDetail(h.cardId); });
+        c.addEventListener('contextmenu', (e) => { e.preventDefault(); showCardDetail(h.cardId); });
         const key = el('div', 'c-key', String(i + 1));
         c.appendChild(key);
         this.hand.appendChild(c);
@@ -191,7 +200,7 @@ export class HUD {
   layoutHand() {
     const cards = [...this.handCards.values()];
     const anyHover = cards.some((c) => c.dataset.hover === '1');
-    const base = window.innerWidth < 820 ? 0.72 : 1;
+    const base = handScale();
     for (const c of cards) {
       const i = +c.dataset.index, n = +c.dataset.n, sp = +c.dataset.spacing;
       const off = i - (n - 1) / 2;
@@ -199,9 +208,10 @@ export class HUD {
       const sel = c.classList.contains('selected');
       let x = off * sp - 64;
       let rot = off * 3.2;
-      let y = Math.abs(off) * Math.abs(off) * 2.2 + (1 - base) * 70;
+      // 縮小時は変形の基準点 (カード下端より下) に引っ張られて沈む分を戻す
+      let y = Math.abs(off) * Math.abs(off) * 2.2 * base - 36 * (1 - base);
       let scale = base;
-      if (hover || sel) { rot = 0; y = base < 1 ? -60 : -110; scale = 1.42 * base; }
+      if (hover || sel) { rot = 0; y = base < 1 ? -70 * base : -110; scale = 1.42 * base; }
       else if (anyHover) {
         const hi = cards.find((k) => k.dataset.hover === '1');
         const d = i - +hi.dataset.index;
@@ -280,16 +290,39 @@ export class HUD {
   // インスペクタ・ツールチップ
   // ------------------------------------------------------------
 
-  inspectorHtml(html, team) {
+  // opts.pinned: タップで固定表示 (タッチ端末)。固定中はホバーで上書きしない
+  // opts.detail: 「詳細」ボタンで開くカード詳細の関数
+  inspectorHtml(html, team, opts = {}) {
+    if (this.pinned && !opts.pinned) return;
     const ins = $('inspector');
     ins.innerHTML = html;
+    if (opts.detail) {
+      const bar = el('div', 'ins-actions');
+      const d = el('button', 'ins-detail', 'ⓘ カード詳細');
+      d.onclick = (e) => { e.stopPropagation(); opts.detail(); };
+      bar.appendChild(d);
+      if (opts.pinned) {
+        const x = el('button', 'ins-close', '閉じる');
+        x.onclick = (e) => { e.stopPropagation(); this.hideInspector(true); };
+        bar.appendChild(x);
+      }
+      ins.appendChild(bar);
+    }
     if (team) ins.style.setProperty('--team', team);
+    else ins.style.removeProperty('--team');
+    this.pinned = !!opts.pinned;
+    ins.classList.toggle('pinned', this.pinned);
     ins.classList.remove('hidden');
   }
 
-  hideInspector() { $('inspector').classList.add('hidden'); }
+  hideInspector(force = false) {
+    if (this.pinned && !force) return;
+    this.pinned = false;
+    $('inspector').classList.remove('pinned');
+    $('inspector').classList.add('hidden');
+  }
 
-  inspectUnit(state, u, names) {
+  inspectUnit(state, u, names, opts = {}) {
     const c = CARDS[u.cardId];
     const t = state.tiles[u.y * 7 + u.x];
     const art = cardArt(u.cardId);
@@ -316,22 +349,29 @@ export class HUD {
       <div class="ins-stats"><span>⚔ ${u.atk}${atkNote}</span><span>❤ ${u.hp}/${u.maxHp}</span><span>👣 ${u.move}</span><span>🎯 ${u.range}</span></div>
       <div class="ins-status">${chips.join('')}</div>
       ${text}${lines}
-      <div class="ins-tile">足場: <b>${tr.name}</b> (高さ${t.height})${tileNote}<br>${tr.desc}</div>`, TEAM_COLORS[u.owner]);
+      <div class="ins-tile">足場: <b>${tr.name}</b> (高さ${t.height})${tileNote}<br>${tr.desc}</div>`, TEAM_COLORS[u.owner],
+    { pinned: opts.pinned, detail: () => showCardDetail(u.cardId, { unit: u, state, ownerName: names[u.owner] }) });
   }
 
-  inspectTile(state, x, y) {
+  inspectTile(state, x, y, opts = {}) {
     const t = state.tiles[y * 7 + x];
     const tr = TERRAIN[t.terrain];
     this.inspectorHtml(`<div class="ins-name">${tr.name}</div><div class="ins-sub">${coordName(x, y)} · 高さ ${t.height}</div>
       <div class="ins-line">${tr.desc}</div>
-      <div class="ins-line" style="color:var(--muted)">高所から低所への攻撃はダメージ+1。高低差2以上は地上ユニットが登れない。</div>`);
+      <div class="ins-line" style="color:var(--muted)">高所から低所への攻撃はダメージ+1。高低差2以上は地上ユニットが登れない。</div>`, null, { pinned: opts.pinned });
   }
 
-  inspectCard(cardId) {
+  inspectCard(cardId, opts = {}) {
     const c = CARDS[cardId];
     const lines = keywordHelp(cardId).map((s) => `<div class="ins-line">${s}</div>`).join('');
-    if (!lines) { this.hideInspector(); return; }
-    this.inspectorHtml(`<div class="ins-name">${c.name}</div><div class="ins-sub">キーワード解説</div>${lines}`);
+    const art = c.type === 'unit' ? cardArt(cardId) : null;
+    const stats = c.type === 'unit' ? `<div class="ins-stats"><span>⚔ ${c.atk}</span><span>❤ ${c.hp}</span><span>👣 ${c.move}</span><span>🎯 ${c.range}</span></div>` : '';
+    this.inspectorHtml(`
+      <div class="ins-head">${art ? `<div class="ins-art" style="background-image:url(${art})"></div>` : `<div class="ins-art ins-icon">${c.icon || '✦'}</div>`}
+      <div><div class="ins-name">${c.name}</div><div class="ins-sub">${typeName(c)} · ${factionName(c.faction)} · コスト ${c.cost}</div></div></div>
+      ${stats}
+      ${c.text ? `<div class="ins-line">${c.text}</div>` : ''}${lines}
+      <div class="ins-tile">${targetText(c)}</div>`, null, { pinned: opts.pinned, detail: () => showCardDetail(cardId) });
   }
 
   tooltip(x, y, html) {
@@ -399,4 +439,17 @@ export class HUD {
       this.cancelDir = () => done(null);
     });
   }
+}
+
+// 画面サイズに応じた手札の縮尺
+function handScale() {
+  const w = window.innerWidth, h = window.innerHeight;
+  if (h <= 520 && w > h) return 0.56;
+  if (w <= 600) return 0.72;
+  return 1;
+}
+
+export function cardLink(cardId) {
+  const c = CARDS[cardId];
+  return `<a class="card-link" data-card="${cardId}">「${c.name}」</a>`;
 }

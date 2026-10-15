@@ -111,14 +111,18 @@ export class BoardView {
     // 縦長画面でも盤面の横幅が収まる距離までカメラを引く
     const base = new THREE.Vector3(0, 9.2, 9.6);
     const need = 4.5 / (Math.tan(THREE.MathUtils.degToRad(21)) * aspect);
-    const dist = Math.max(base.length(), need);
-    const target = new THREE.Vector3(0, 0, aspect < 1 ? 0.9 : 0.4);
+    const landscapePhone = h <= 520 && aspect > 1;
+    const dist = Math.max(base.length(), need) * (landscapePhone ? 1.04 : 1);
+    // 手札などの UI に隠れないよう、盤面が画面のやや上に来るよう注視点をずらす
+    const target = new THREE.Vector3(0, 0, landscapePhone ? 1.5 : aspect < 1 ? 0.9 : 0.4);
     this.homeView = { pos: base.clone().setLength(dist).add(target), target };
     this.controls.maxDistance = Math.max(20, dist * 1.3);
-    if (this.camera.position.distanceTo(this.controls.target) < dist * 0.85) {
+    const cls = landscapePhone ? 'land' : aspect < 1 ? 'port' : 'wide';
+    if (this.camera.position.distanceTo(this.controls.target) < dist * 0.85 || (this.fitClass && this.fitClass !== cls)) {
       this.camera.position.copy(this.homeView.pos);
       this.controls.target.copy(target);
     }
+    this.fitClass = cls;
     this.renderer.setSize(w, h);
     if (this.composer) this.composer.setSize(w, h);
     if (this.fx) this.fx.particles.resize(h);
@@ -634,16 +638,37 @@ export class BoardView {
       const hit = this.pick(e.clientX, e.clientY);
       this.emit('hover', hit, e);
     });
-    el.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY, b: e.button, t: performance.now() }; });
-    el.addEventListener('pointerup', (e) => {
-      if (!down) return;
+    let pointers = 0;
+    el.addEventListener('pointerdown', (e) => {
+      pointers++;
+      down = pointers === 1 ? { x: e.clientX, y: e.clientY, b: e.button, t: performance.now(), long: false } : null;
+      clearTimeout(this.longTimer);
+      // 長押し (主にタッチ): 詳細表示
+      if (down && e.pointerType !== 'mouse') {
+        const d = down;
+        this.longTimer = setTimeout(() => {
+          if (down !== d) return;
+          d.long = true;
+          this.emit('longpress', this.pick(d.x, d.y), e);
+        }, 480);
+      }
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) >= 8) clearTimeout(this.longTimer);
+    });
+    const end = (e) => {
+      pointers = Math.max(0, pointers - 1);
+      clearTimeout(this.longTimer);
+      if (!down || e.type === 'pointercancel') { down = null; return; }
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
-      if (moved < 8 && performance.now() - down.t < 600) {
+      if (!down.long && moved < 8 && performance.now() - down.t < 600) {
         if (down.b === 0) this.emit('click', this.pick(e.clientX, e.clientY), e);
-        else if (down.b === 2) this.emit('rightclick', e);
+        else if (down.b === 2) this.emit('rightclick', this.pick(e.clientX, e.clientY), e);
       }
       down = null;
-    });
+    };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
     el.addEventListener('contextmenu', (e) => e.preventDefault());
     el.addEventListener('pointerleave', () => this.emit('hover', null));
   }

@@ -6,6 +6,10 @@ import {
 } from './engine/rules.js';
 import { DIFFICULTY, planTurn, describePlan, intentOf, evaluate, winProb, threatMap } from './engine/ai.js';
 import { randomSeed } from './engine/rng.js';
+import { cardLink } from './ui/hud.js';
+import { showCardDetail, openDeckViewer } from './ui/cardinfo.js';
+
+const isTouch = () => window.matchMedia('(hover: none)').matches;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -22,6 +26,7 @@ export class Game {
     this.sel = { mode: 'idle' };
     this.showThreat = false;
     this.unitCard = new Map();
+    this.played = [[], []];
     this.ai = opts.watch ? [true, true] : [false, true];
     this.human = opts.watch ? null : 0;
     this.diff = [opts.diff, opts.diff];
@@ -119,7 +124,8 @@ export class Game {
         case 'play': {
           const c = CARDS[e.cardId];
           const at = e.x !== undefined ? ` (${coordName(e.x, e.y)})` : '';
-          this.hud.addLog(`${this.names[e.player]}: 「${c.name}」${at}`, 'p' + e.player);
+          this.hud.addLog(`${this.names[e.player]}: ${cardLink(e.cardId)}${at}`, 'p' + e.player);
+          this.played[e.player].push(e.cardId);
           sfx('card');
           this.hud.setMana(e.player, e.mana, s.players[e.player].maxMana);
           if (this.human === null || e.player !== this.human) {
@@ -140,7 +146,8 @@ export class Game {
           if (e.player === this.human) { sfx('draw'); this.refreshUI(); }
           break;
         case 'burn':
-          this.hud.addLog(`${this.names[e.player]}の手札があふれ「${CARDS[e.cardId].name}」が燃え尽きた`, 'sys');
+          this.hud.addLog(`${this.names[e.player]}の手札があふれ${cardLink(e.cardId)}が燃え尽きた`, 'sys');
+          if (e.player !== this.human) this.played[e.player].push(e.cardId);
           if (e.player === this.human) this.hud.toast(`手札が上限 (9枚) のため「${CARDS[e.cardId].name}」を失いました`);
           break;
         case 'fatigue':
@@ -444,6 +451,7 @@ export class Game {
 
   onHover(hit, e) {
     if (this.aborted) return;
+    if (e && e.pointerType === 'touch') return;
     const s = this.state;
     this.view.setHover(hit ? hit.x : null, hit ? hit.y : null);
     if (!hit) { this.hud.tooltip(0, 0, null); this.hud.hideInspector(); return; }
@@ -497,6 +505,14 @@ export class Game {
   async onClick(hit) {
     if (this.aborted || this.picking) return;
     this.sound.resume();
+    // タッチ端末ではタップしたユニット/マスの情報を下部に固定表示
+    if (isTouch()) {
+      if (hit) {
+        const t = unitAt(this.state, hit.x, hit.y);
+        if (t) this.hud.inspectUnit(this.state, t, this.names, { pinned: true });
+        else if (this.sel.mode === 'idle') this.hud.inspectTile(this.state, hit.x, hit.y, { pinned: true });
+      } else this.hud.hideInspector(true);
+    }
     if (!this.humanTurn) return;
     const s = this.state;
     const sel = this.sel;
@@ -547,11 +563,45 @@ export class Game {
     if (sel.mode !== 'idle') { this.sfx('cancel'); this.clearSelection(); }
   }
 
-  onRightClick() {
-    if (this.sel.mode !== 'idle') { this.sfx('cancel'); this.clearSelection(); }
+  onRightClick(hit) {
+    if (this.sel.mode !== 'idle') { this.sfx('cancel'); this.clearSelection(); return; }
+    this.showDetailAt(hit);
+  }
+
+  onLongPress(hit) {
+    this.showDetailAt(hit);
+  }
+
+  // マス上のユニットのカード詳細を開く
+  showDetailAt(hit) {
+    if (!hit || this.aborted) return;
+    const u = unitAt(this.state, hit.x, hit.y);
+    if (u) showCardDetail(u.cardId, { unit: u, state: this.state, ownerName: this.names[u.owner] });
+  }
+
+  openDeck() {
+    const s = this.state;
+    const cnt = (arr, id) => arr.reduce((n, x) => n + ((x.cardId ?? x) === id ? 1 : 0), 0);
+    const full = (p) => (id, total) => {
+      const d = cnt(s.players[p].deck, id), h = cnt(s.players[p].hand, id);
+      const used = total - d - h;
+      return { text: `山札 ${d} · 手札 ${h}${used > 0 ? ` · 使用 ${used}` : ''}`, dim: d + h === 0 };
+    };
+    const pub = (p) => (id, total) => {
+      const used = cnt(this.played[p], id);
+      return { text: used ? `使用済み ${used} / 残り ${total - used}` : '未使用', dim: used >= total };
+    };
+    const tabs = this.opts.watch
+      ? [0, 1].map((p) => ({ label: this.names[p], faction: s.players[p].faction, status: full(p), note: `山札 ${s.players[p].deck.length}枚 · 手札 ${s.players[p].hand.length}枚` }))
+      : [
+        { label: 'あなたのデッキ', faction: s.players[this.human].faction, status: full(this.human), note: `山札 ${s.players[this.human].deck.length}枚 · 手札 ${s.players[this.human].hand.length}枚 (山札の順番は分かりません)` },
+        { label: '相手のデッキ', faction: s.players[1 - this.human].faction, status: pub(1 - this.human), note: '相手のデッキリストは公開情報です。使用済みのカード以外は、山札と手札のどちらにあるか分かりません。' },
+      ];
+    openDeckViewer(tabs, 0);
   }
 
   onHandHover(uid, on) {
+    if (isTouch()) return;
     if (!on) { this.hud.hideInspector(); return; }
     const h = this.state.players[this.human ?? 0].hand.find((x) => x.uid === uid);
     if (h) this.hud.inspectCard(h.cardId);
@@ -560,6 +610,10 @@ export class Game {
 
   onHandClick(uid) {
     this.sound.resume();
+    if (isTouch()) {
+      const hh = this.state.players[this.human ?? 0].hand.find((x) => x.uid === uid);
+      if (hh) this.hud.inspectCard(hh.cardId, { pinned: true });
+    }
     if (!this.humanTurn) return;
     const s = this.state;
     const h = s.players[this.human].hand.find((x) => x.uid === uid);
@@ -613,10 +667,11 @@ export class Game {
 
   onKey(e) {
     const k = e.key.toLowerCase();
-    if (k === 'escape') { this.hud.cancelDir && this.hud.cancelDir(); this.onRightClick(); }
+    if (k === 'escape') { this.hud.cancelDir && this.hud.cancelDir(); this.hud.hideInspector(true); if (this.sel.mode !== 'idle') { this.sfx('cancel'); this.clearSelection(); } }
     else if (k === 'enter' || k === ' ') { e.preventDefault(); this.endTurn(); }
     else if (k === 'h') this.hint();
     else if (k === 'v') this.toggleThreat();
+    else if (k === 'd') this.openDeck();
     else if (/^[1-9]$/.test(k) && this.human !== null) {
       const h = this.state.players[this.human].hand[+k - 1];
       if (h) this.onHandClick(h.uid);
