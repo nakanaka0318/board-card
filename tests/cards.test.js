@@ -98,3 +98,22 @@ test('撤退命令でユニットが手札に戻る', () => {
   assert.ok(s.players[0].hand.some((h) => h.cardId === 'az_guardian'));
   void leaderOf;
 });
+
+test('完全下位互換のユニットが存在しない', () => {
+  // x が y と同じデッキに入れられ、コストが同じか高く、能力値・キーワードがすべて y 以下で、
+  // 固有の効果も持たないなら x は y の完全下位互換
+  const units = Object.values(CARDS).filter((c) => c.type === 'unit');
+  const hasFx = (c) => !!(c.onSummon || c.onDeath || c.onTurnStart || c.text);
+  const shareDeck = (a, b) => a.faction === 'neutral' || b.faction === 'neutral' || a.faction === b.faction;
+  const found = [];
+  for (const x of units) {
+    if (hasFx(x)) continue;
+    for (const y of units) {
+      if (x === y || !shareDeck(x, y) || (y.legend && !x.legend)) continue;
+      const worse = x.cost >= y.cost && x.atk <= y.atk && x.hp <= y.hp && x.move <= y.move && x.range <= y.range
+        && x.armor <= y.armor && x.regen <= y.regen && x.keywords.every((k) => y.keywords.includes(k));
+      if (worse) found.push(`${x.name} は ${y.name} の下位互換`);
+    }
+  }
+  assert.deepEqual(found, []);
+});

@@ -114,7 +114,7 @@ def('n_mage', {
     if (t) { G.fx('bolt', c.self, t); G.damage(t, 2, 'spell'); }
   },
 });
-def('n_giant', { name: '丘の巨人', faction: 'neutral', type: 'unit', cost: 5, atk: 5, hp: 6, move: 2, model: 'giant', text: '' });
+def('n_giant', { name: '丘の巨人', faction: 'neutral', type: 'unit', cost: 5, atk: 6, hp: 7, move: 2, model: 'giant', text: '' });
 def('s_lightning', {
   name: '稲妻', faction: 'neutral', type: 'spell', cost: 2, target: 'enemyUnit', icon: '⚡', fx: 'lightning',
   text: '敵ユニット1体に3ダメージ。',
@@ -248,7 +248,7 @@ def('f_quake', {
 
 // ---------------- 蒼穹機関 ----------------
 def('az_cog', { name: '歯車兵', faction: 'azure', type: 'unit', cost: 1, atk: 1, hp: 2, move: 2, armor: 1, model: 'cog', text: '' });
-def('az_gunner', { name: '機械弓兵', faction: 'azure', type: 'unit', cost: 2, atk: 2, hp: 2, move: 2, range: 3, model: 'gunner', text: '' });
+def('az_gunner', { name: '機械弓兵', faction: 'azure', type: 'unit', cost: 2, atk: 2, hp: 2, move: 1, range: 3, armor: 1, model: 'gunner', text: '' });
 def('az_tide', {
   name: '潮の術士', faction: 'azure', type: 'unit', cost: 3, atk: 2, hp: 3, move: 2, range: 2, model: 'tidemage',
   text: '召喚時: 隣接する敵ユニットをすべて1マス押し出す。',
@@ -309,8 +309,8 @@ def('n_healer', {
   onTurnStart(G, c) { G.heal(G.leaderOf(c.self.owner), 1); },
 });
 def('n_wall', { name: '石の防壁', faction: 'neutral', type: 'unit', cost: 2, atk: 0, hp: 6, move: 0, armor: 1, keywords: ['guard'], model: 'wall', text: '攻撃も移動もできない壁。' });
-def('n_assassin', { name: '影の暗殺者', faction: 'neutral', type: 'unit', cost: 3, atk: 3, hp: 1, move: 3, keywords: ['haste'], model: 'rogue', text: '' });
-def('n_ogre', { name: 'オーガ', faction: 'neutral', type: 'unit', cost: 4, atk: 5, hp: 4, move: 2, model: 'giant', text: '' });
+def('n_assassin', { name: '影の暗殺者', faction: 'neutral', type: 'unit', cost: 2, atk: 3, hp: 1, move: 3, keywords: ['haste'], model: 'rogue', text: '' });
+def('n_ogre', { name: 'オーガ', faction: 'neutral', type: 'unit', cost: 4, atk: 6, hp: 4, move: 2, model: 'giant', text: '' });
 def('s_rally', {
   name: '鼓舞', faction: 'neutral', type: 'spell', cost: 1, target: 'friendlyUnit', icon: '🎺', fx: 'buff',
   text: '味方ユニット1体に+1/+1。',
