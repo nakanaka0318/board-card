@@ -1036,7 +1036,9 @@ body.watch #hand, body.watch #end-turn, body.watch #btn-hint { display: none; }
   .ab-title { font-size: 14px; }
   .ab-hint { font-size: 11px; }
   .ab-btn { min-height: 40px; padding: 0 10px; font-size: 12px; }
-  body.has-action .player-panel.me, body.has-action #end-turn { visibility: hidden; }
+  /* 案内バー表示中は自分のパネルを隠し、ターン終了ボタンはバーの上へ逃がす */
+  body.has-action .player-panel.me { visibility: hidden; }
+  body.has-action #end-turn { bottom: 206px; }
   .two-col { grid-template-columns: 1fr; gap: 0; }
   .title-actions { flex-wrap: wrap; }
   .title-actions .big-btn { flex: 1 1 100%; }

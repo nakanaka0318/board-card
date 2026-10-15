@@ -31,7 +31,7 @@ export const MAPS = {
   },
   highlands: {
     name: '天空の段丘',
-    desc: '高低差の激しい山岳地帯。高所を制する者が戦場を制す。',
+    desc: '中央に高台がそびえる段丘。高所を制する者が戦場を制す。',
     terrain: [
       '...F...',
       '.F...C.',
@@ -42,13 +42,13 @@ export const MAPS = {
       '...F...',
     ],
     height: [
-      '0001000',
-      '1200210',
-      '0100120',
-      '2101012',
-      '0210010',
-      '0120021',
-      '0001000',
+      '0010100',
+      '0100010',
+      '1000010',
+      '0102010',
+      '0100001',
+      '0100010',
+      '0010100',
     ],
   },
   volcano: {
@@ -65,11 +65,11 @@ export const MAPS = {
     ],
     height: [
       '0100010',
-      '0011100',
-      '0120210',
-      '1212121',
-      '0120210',
-      '0011100',
+      '0010100',
+      '0000000',
+      '1001001',
+      '0000000',
+      '0010100',
       '0100010',
     ],
   },
@@ -102,7 +102,9 @@ function randomMap(s) {
         continue;
       }
       let terrain = kinds[randInt(s, kinds.length)];
-      let height = rand(s) < 0.55 ? 0 : rand(s) < 0.7 ? 1 : 2;
+      // 古戦場と同じくらいの起伏 (約3割が高さ1、ごく一部が高さ2)
+      const r = rand(s);
+      let height = r < 0.72 ? 0 : r < 0.96 ? 1 : 2;
       const nearHome = Math.abs(x - 3) <= 1 && (y <= 1 || y >= 5);
       if (nearHome) { terrain = 'plain'; height = 0; }
       if (y === 0 || y === 6) { if (terrain === 'lava' || terrain === 'water') terrain = 'plain'; }

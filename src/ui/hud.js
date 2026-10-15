@@ -153,7 +153,9 @@ export class HUD {
     else { this.hand.innerHTML = ''; this.handCards.clear(); this.handArgs = null; }
     // ターン終了ボタン
     const et = $('end-turn');
-    et.disabled = !humanTurn;
+    // 演出中も押せるようにする (押した場合は演出の終了後にターン終了)
+    const myTurn = !ctx.watch && state.winner === null && state.current === ctx.human && !aiThinking;
+    et.disabled = !myTurn;
     et.classList.toggle('ready', !!(humanTurn && ctx.noMoves));
   }
 

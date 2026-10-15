@@ -289,8 +289,8 @@ export function targetsFor(s, p, kind) {
     case 'friendlyAny':
       for (const u of units) if (u.owner === p) out.push({ x: u.x, y: u.y });
       return out;
-    case 'heroEnemy4':
-      for (const u of units) if (u.owner !== p && dist(u.x, u.y, L.x, L.y) <= 4) out.push({ x: u.x, y: u.y });
+    case 'heroEnemy3':
+      for (const u of units) if (u.owner !== p && dist(u.x, u.y, L.x, L.y) <= 3) out.push({ x: u.x, y: u.y });
       return out;
     case 'heroPush3':
       for (const u of units) if (u.owner !== p && !u.leader && dist(u.x, u.y, L.x, L.y) <= 3) out.push({ x: u.x, y: u.y });

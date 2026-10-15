@@ -42,8 +42,8 @@ export const FACTIONS = {
     hero: {
       name: '火花',
       cost: 2,
-      target: 'heroEnemy4',
-      text: '自リーダーから4マス以内の敵1体に1ダメージ。',
+      target: 'heroEnemy3',
+      text: '自リーダーから3マス以内の敵1体に1ダメージ。',
       fx: 'spark',
       effect(G, c) { G.damage(c.target, 1, 'spell'); },
     },
@@ -58,8 +58,8 @@ export const FACTIONS = {
     hero: {
       name: '芽吹き',
       cost: 2,
-      target: 'friendlyUnit',
-      text: '味方ユニット1体のHPを2回復。',
+      target: 'friendlyAny',
+      text: '味方1体 (将を含む) のHPを2回復。',
       fx: 'heal',
       effect(G, c) { G.heal(c.target, 2); },
     },
@@ -167,10 +167,10 @@ def('fi_dragon', {
 });
 def('s_fireball', {
   name: '火球', faction: 'fire', type: 'spell', cost: 3, target: 'enemyAny', icon: '☄️', fx: 'fireball',
-  text: '敵1体 (リーダー含む) に4ダメージ。隣接する敵に1ダメージ。',
+  text: '敵1体 (リーダー含む) に3ダメージ。隣接する敵に1ダメージ。',
   effect(G, c) {
     const { x, y } = c.target;
-    G.damage(c.target, 4, 'spell');
+    G.damage(c.target, 3, 'spell');
     for (const u of G.enemiesWithin(c.player, x, y, 1)) if (u !== c.target) G.damage(u, 1, 'spell');
   },
 });
@@ -213,7 +213,7 @@ def('fo_priestess', {
     G.heal(G.leaderOf(c.player), 3);
   },
 });
-def('fo_treant', { name: 'トレント', faction: 'forest', type: 'unit', cost: 5, atk: 3, hp: 6, move: 1, regen: 2, keywords: ['guard'], model: 'treant', text: '' });
+def('fo_treant', { name: 'トレント', faction: 'forest', type: 'unit', cost: 5, atk: 4, hp: 6, move: 1, regen: 2, keywords: ['guard'], model: 'treant', text: '' });
 def('fo_beast', {
   name: '世界樹の守護獣', faction: 'forest', type: 'unit', cost: 7, atk: 6, hp: 7, move: 2, model: 'stag',
   text: '召喚時: 他の味方ユニットすべてに+1/+1。',
@@ -247,17 +247,17 @@ def('f_quake', {
 });
 
 // ---------------- 蒼穹機関 ----------------
-def('az_cog', { name: '歯車兵', faction: 'azure', type: 'unit', cost: 1, atk: 1, hp: 2, move: 2, armor: 1, model: 'cog', text: '' });
+def('az_cog', { name: '歯車兵', faction: 'azure', type: 'unit', cost: 1, atk: 1, hp: 3, move: 2, armor: 1, model: 'cog', text: '' });
 def('az_gunner', { name: '機械弓兵', faction: 'azure', type: 'unit', cost: 2, atk: 2, hp: 2, move: 1, range: 3, armor: 1, model: 'gunner', text: '' });
 def('az_tide', {
-  name: '潮の術士', faction: 'azure', type: 'unit', cost: 3, atk: 2, hp: 3, move: 2, range: 2, model: 'tidemage',
+  name: '潮の術士', faction: 'azure', type: 'unit', cost: 3, atk: 2, hp: 4, move: 2, range: 2, model: 'tidemage',
   text: '召喚時: 隣接する敵ユニットをすべて1マス押し出す。',
   onSummon(G, c) {
     G.fx('wave', c.self, null, {});
     for (const u of G.enemiesWithin(c.player, c.self.x, c.self.y, 1)) if (!u.leader) G.push(u, c.self.x, c.self.y);
   },
 });
-def('az_guardian', { name: '鋼鉄の守護者', faction: 'azure', type: 'unit', cost: 4, atk: 3, hp: 5, move: 1, armor: 2, keywords: ['guard'], model: 'mech', text: '' });
+def('az_guardian', { name: '鋼鉄の守護者', faction: 'azure', type: 'unit', cost: 4, atk: 3, hp: 6, move: 1, armor: 2, keywords: ['guard'], model: 'mech', text: '' });
 def('az_turret', { name: '浮遊砲台', faction: 'azure', type: 'unit', cost: 5, atk: 4, hp: 4, move: 2, range: 3, keywords: ['flying'], model: 'turret', text: '' });
 def('az_leviathan', {
   name: '嵐の巨鯨', faction: 'azure', type: 'unit', cost: 7, atk: 5, hp: 7, move: 3, keywords: ['flying'], model: 'whale',

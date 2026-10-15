@@ -90,21 +90,31 @@ export class Game {
     this.busy = true;
     this.clearSelection(false);
     s.events = [];
-    const ok = applyAction(s, action);
-    const ev = s.events;
-    s.events = [];
-    if (!ok) {
-      this.busy = false;
-      this.refreshUI();
-      return false;
+    let ok = false;
+    try {
+      ok = applyAction(s, action);
+      const ev = s.events;
+      s.events = [];
+      if (ok) await this.playEvents(ev);
+    } catch (err) {
+      // 演出で例外が起きても操作不能にならないよう、状態に合わせて立て直す
+      console.error(err);
+    } finally {
+      s.events = [];
+      if (!this.aborted) {
+        try { this.view.sync(s); } catch (err) { console.error(err); }
+        this.busy = false;
+        this.refreshUI();
+      }
     }
-    await this.playEvents(ev);
     if (this.aborted) return false;
-    this.view.sync(s);
-    this.busy = false;
-    this.refreshUI();
-    if (s.winner !== null) this.gameOver();
-    return true;
+    if (s.winner !== null) { this.gameOver(); return ok; }
+    // 演出中に押されたターン終了をここで実行する
+    if (this.pendingEnd && action.type !== 'end' && s.current === this.human) {
+      this.pendingEnd = false;
+      this.endTurn();
+    }
+    return ok;
   }
 
   async playEvents(events, skipTurnStart) {
@@ -250,6 +260,7 @@ export class Game {
       this.hud.toast('AI の処理中にエラーが発生しました: ' + err.message, 5000);
     } finally {
       this.driving = false;
+      this.pendingEnd = false;
     }
     if (!this.aborted) {
       this.refreshUI();
@@ -372,12 +383,19 @@ export class Game {
     this.hud.aiReset('AI の助言', DIFFICULTY.normal.name);
     this.hud.aiThinking(true, 'あなたの最善手を検討中…', 'advice');
     const t0 = performance.now();
-    const res = await planTurn(s, DIFFICULTY.normal, (pr) => {
-      this.hud.aiProgress({ evaluated: pr.evaluated, depth: pr.depth, time: performance.now() - t0 });
-    });
-    this.busy = false;
-    this.hinting = false;
-    if (this.aborted) return;
+    let res;
+    try {
+      res = await planTurn(s, DIFFICULTY.normal, (pr) => {
+        this.hud.aiProgress({ evaluated: pr.evaluated, depth: pr.depth, time: performance.now() - t0 });
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      this.busy = false;
+      this.hinting = false;
+    }
+    if (this.aborted || !res) { this.refreshUI(); return; }
+    if (this.pendingEnd) { this.pendingEnd = false; this.refreshUI(); this.endTurn(); return; }
     const plan = describePlan(s, res.actions);
     this.hud.aiProgress({ evaluated: res.evaluated, depth: res.actions.length, time: performance.now() - t0, plan: plan.length ? plan : ['このままターン終了するのが良さそうです'] });
     this.hud.aiThinking(true, '提案: 上から順に実行すると良いでしょう', 'advice');
@@ -769,8 +787,18 @@ export class Game {
 
   async endTurn() {
     this.sound.resume();
-    if (!this.humanTurn) return;
+    const s = this.state;
+    if (this.aborted || this.human === null || s.winner !== null || s.current !== this.human || this.driving) return;
     this.hud.cancelDir && this.hud.cancelDir();
+    this.picking = false;
+    if (this.busy || this.hinting) {
+      // 演出中・助言の計算中なら、終わり次第ターンを終了する
+      this.pendingEnd = true;
+      this.hud.toast('この行動が終わったらターンを終了します');
+      if (this.hinting && !this.busy) return;
+      return;
+    }
+    this.pendingEnd = false;
     await this.perform({ type: 'end' });
     this.drive();
   }

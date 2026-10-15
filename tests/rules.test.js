@@ -180,7 +180,7 @@ test('英雄の力の対象', () => {
   const s = blank();
   addUnit(s, 1, 'n_squire', 3, 3);
   addUnit(s, 1, 'n_squire', 3, 5);
-  const t = targetsFor(s, 0, 'heroEnemy4');
+  const t = targetsFor(s, 0, 'heroEnemy3');
   assert.equal(t.length, 1);
   assert.ok(unitAt(s, t[0].x, t[0].y));
 });
