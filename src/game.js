@@ -46,7 +46,8 @@ export class Game {
   start() {
     const o = this.opts;
     const first = o.first === 'random' ? (Math.random() < 0.5 ? 0 : 1) : +o.first;
-    this.state = createGame({ factions: o.factions, seed: o.seed ?? randomSeed(), first, map: o.map });
+    this.state = createGame({ factions: o.factions, decks: o.decks, seed: o.seed ?? randomSeed(), first, map: o.map });
+    this.deckNames = o.deckNames || ['', ''];
     const s = this.state;
     for (const u of s.units) this.unitCard.set(u.uid, u.cardId);
     s.events = [];
@@ -174,6 +175,9 @@ export class Game {
         }
         case 'death':
           this.hud.addLog(`　${this.unitName(e.uid)} は倒れた`, 'p' + (1 - e.owner));
+          break;
+        case 'vanish':
+          this.hud.addLog(`　${this.unitName(e.uid)} は手札に戻った`, 'p' + e.owner);
           break;
         case 'fx':
           if (e.kind === 'siege') this.hud.addLog(`${this.unitName(e.from.uid)} が敵陣を侵攻! 敵の将に1ダメージ`, 'p' + this.ownerOf(e.from.uid));
@@ -700,10 +704,10 @@ export class Game {
       return { text: used ? `使用済み ${used} / 残り ${total - used}` : '未使用', dim: used >= total };
     };
     const tabs = this.opts.watch
-      ? [0, 1].map((p) => ({ label: this.names[p], faction: s.players[p].faction, status: full(p), note: `山札 ${s.players[p].deck.length}枚 · 手札 ${s.players[p].hand.length}枚` }))
+      ? [0, 1].map((p) => ({ label: this.names[p], faction: s.players[p].faction, cards: s.players[p].deckList, title: this.deckNames[p], status: full(p), note: `山札 ${s.players[p].deck.length}枚 · 手札 ${s.players[p].hand.length}枚` }))
       : [
-        { label: 'あなたのデッキ', faction: s.players[this.human].faction, status: full(this.human), note: `山札 ${s.players[this.human].deck.length}枚 · 手札 ${s.players[this.human].hand.length}枚 (山札の順番は分かりません)` },
-        { label: '相手のデッキ', faction: s.players[1 - this.human].faction, status: pub(1 - this.human), note: '相手のデッキリストは公開情報です。使用済みのカード以外は、山札と手札のどちらにあるか分かりません。' },
+        { label: 'あなたのデッキ', faction: s.players[this.human].faction, cards: s.players[this.human].deckList, title: this.deckNames[this.human], status: full(this.human), note: `山札 ${s.players[this.human].deck.length}枚 · 手札 ${s.players[this.human].hand.length}枚 (山札の順番は分かりません)` },
+        { label: '相手のデッキ', faction: s.players[1 - this.human].faction, cards: s.players[1 - this.human].deckList, title: this.deckNames[1 - this.human], status: pub(1 - this.human), note: '相手のデッキリストは公開情報です。使用済みのカード以外は、山札と手札のどちらにあるか分かりません。' },
       ];
     openDeckViewer(tabs, 0);
   }

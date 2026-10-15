@@ -101,6 +101,10 @@
         <h3 id="lbl-my-faction">あなたの勢力</h3>
         <div class="faction-row" id="opt-faction"></div>
       </section>
+      <section>
+        <h3>使うデッキ</h3>
+        <div class="deck-pick" id="opt-deck"></div>
+      </section>
       <section class="two-col">
         <div>
           <h3 id="lbl-ai-faction">相手の勢力</h3>
@@ -127,9 +131,36 @@
       </section>
       <div class="title-actions">
         <button id="btn-start" class="big-btn">戦いを始める</button>
-        <button id="btn-title-deck" class="ghost-btn">カード一覧</button>
+        <button id="btn-title-deck" class="ghost-btn">🃏 デッキ編成</button>
         <button id="btn-title-rules" class="ghost-btn">遊び方</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ===================== デッキ編成 ===================== -->
+  <div id="deck-builder" class="hidden">
+    <div class="db-head">
+      <button class="db-back" type="button">← 戻る</button>
+      <h2>デッキ編成</h2>
+      <div class="db-factions"></div>
+    </div>
+    <div class="db-slots"></div>
+    <div class="db-main">
+      <section class="db-pool">
+        <div class="db-filters"></div>
+        <div class="db-grid"></div>
+      </section>
+      <aside class="db-deck">
+        <button class="db-drawer-toggle" type="button"></button>
+        <div class="db-deck-inner">
+          <input class="db-name" id="db-name" maxlength="16" aria-label="デッキ名">
+          <div class="db-count"><div class="db-bar"><i></i></div><b>0 / 30</b></div>
+          <div class="db-msg"></div>
+          <div class="db-stats"></div>
+          <div class="db-list"></div>
+          <div class="db-actions"></div>
+        </div>
+      </aside>
     </div>
   </div>
 
@@ -171,6 +202,8 @@
         </ul>
         <h4>📘 キーワード能力</h4>
         <dl class="kw-list" id="kw-glossary"></dl>
+        <h4>🃏 デッキ編成</h4>
+        <p>タイトル画面の「デッキ編成」で、自分の勢力のカードと中立カードから30枚のデッキを作れる。同じカードは2枚まで、★の付いた強力なカードは1枚まで。構築済みデッキをコピーして改造するのが手軽。</p>
         <h4>✨ 英雄の力</h4>
         <p>各勢力の将は2マナで1ターンに1回「英雄の力」を使える (自分のパネルのボタン)。</p>
         <h4>🧠 AI について</h4>
@@ -236,6 +269,7 @@
     </div>
   </div>
 
+  <div id="title-toast" role="status"></div>
   <div id="loading"><div class="ld-ring"></div><div class="ld-text">大地を生成中…</div></div>
 
   <noscript>このゲームを遊ぶには JavaScript を有効にしてください。</noscript>

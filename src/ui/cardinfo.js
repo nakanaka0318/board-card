@@ -108,7 +108,7 @@ export function openDeckViewer(tabs, active = 0) {
     tabRow.appendChild(b);
   });
   const tab = tabs[active];
-  const deck = DECKS[tab.faction];
+  const deck = tab.cards || DECKS[tab.faction];
   const list = uniqueSorted(deck);
   // 概要: 種類の内訳とコスト分布
   const byType = { unit: 0, spell: 0, field: 0 };
@@ -118,7 +118,7 @@ export function openDeckViewer(tabs, active = 0) {
   const bars = curve.map((n, i) => `<div class="cv-col"><div class="cv-bar" style="height:calc((100% - 16px) * ${maxC ? (n / maxC).toFixed(3) : 0})"><span>${n || ''}</span></div><div class="cv-x">${i === 7 ? '7+' : i}</div></div>`).join('');
   $('deck-summary').innerHTML = `
     <div class="ds-left">
-      <div class="ds-title">${FACTIONS[tab.faction].emblem} ${FACTIONS[tab.faction].name} <small>${deck.length}枚</small></div>
+      <div class="ds-title">${FACTIONS[tab.faction].emblem} ${tab.title || FACTIONS[tab.faction].name} <small>${deck.length}枚</small></div>
       <div class="ds-types"><span>ユニット <b>${byType.unit}</b></span><span>呪文 <b>${byType.spell}</b></span><span>地形 <b>${byType.field}</b></span></div>
       ${tab.note ? `<div class="ds-note">${tab.note}</div>` : ''}
     </div>

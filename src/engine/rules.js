@@ -48,8 +48,9 @@ export function createGame(opts) {
   s.tiles = buildMap(map, s);
   for (let p = 0; p < 2; p++) {
     const f = factions[p];
-    const deck = shuffle(s, DECKS[f].slice());
-    s.players.push({ faction: f, deck, hand: [], mana: 0, maxMana: 0, heroUsed: false, fatigue: 0, leader: 0 });
+    const list = (opts.decks && opts.decks[p]) || DECKS[f];
+    const deck = shuffle(s, list.slice());
+    s.players.push({ faction: f, deck, deckList: list.slice(), hand: [], mana: 0, maxMana: 0, heroUsed: false, fatigue: 0, leader: 0 });
     const L = makeUnit(s, p, 'leader_' + f, 3, p === 0 ? 0 : H - 1);
     L.leader = true;
     L.sick = false;
@@ -490,17 +491,21 @@ function drawCards(s, p, n) {
 }
 
 function cleanupDead(s) {
-  let any = false;
-  for (const u of s.units) {
-    if (u.hp <= 0 && !u.dead) {
+  // 遺言 (onDeath) が新たな死者を生むことがあるので、落ち着くまで繰り返す
+  for (let guard = 0; guard < 12; guard++) {
+    const dying = s.units.filter((u) => u.hp <= 0 && !u.dead);
+    if (!dying.length) break;
+    for (const u of dying) {
       u.dead = true;
-      any = true;
       emit(s, { type: 'death', uid: u.uid, x: u.x, y: u.y, owner: u.owner, leader: u.leader });
       if (!u.leader) s.stats[1 - u.owner].kills++;
     }
+    s.units = s.units.filter((u) => u.hp > 0);
+    for (const u of dying) {
+      const c = CARDS[u.cardId];
+      if (c.onDeath && !u.leader) c.onDeath(makeApi(s), { self: u, player: u.owner });
+    }
   }
-  if (!any) return;
-  s.units = s.units.filter((u) => u.hp > 0);
   const d0 = !s.units.some((u) => u.uid === s.players[0].leader);
   const d1 = !s.units.some((u) => u.uid === s.players[1].leader);
   if ((d0 || d1) && s.winner === null) {
@@ -523,6 +528,28 @@ function makeApi(s) {
     freeze: (u) => freeze(s, u),
     draw: (p, n) => drawCards(s, p, n),
     addMana: (p, n) => { s.players[p].mana += n; emit(s, { type: 'mana', player: p, mana: s.players[p].mana }); },
+    addCard: (p, id) => addToHand(s, p, id),
+    returnToHand: (u) => {
+      if (u.hp <= 0 || u.leader) return;
+      s.units = s.units.filter((x) => x !== u);
+      u.dead = true;
+      emit(s, { type: 'vanish', uid: u.uid, owner: u.owner });
+      addToHand(s, u.owner, u.cardId);
+    },
+    refresh: (u) => {
+      if (u.hp <= 0 || u.sick || u.frozen) return;
+      u.moved = false;
+      u.attacked = false;
+      emit(s, { type: 'buff', uid: u.uid, atk: u.atk, hp: u.hp, dAtk: 0, dHp: 0, label: '再行動!' });
+    },
+    addMove: (u, n) => {
+      if (u.hp <= 0) return;
+      u.move += n;
+      emit(s, { type: 'buff', uid: u.uid, atk: u.atk, hp: u.hp, dAtk: 0, dHp: 0, label: `移動+${n}` });
+    },
+    // (x,y) の方向へ 1 マス引き寄せる
+    pull: (u, x, y) => push(s, u, 2 * u.x - x, 2 * u.y - y),
+    friendlyAll: (p) => s.units.filter((u) => u.hp > 0 && u.owner === p),
     unitAt: (x, y) => unitAt(s, x, y),
     leaderOf: (p) => leaderOf(s, p),
     enemyUnits: (p) => s.units.filter((u) => u.hp > 0 && u.owner !== p && !u.leader),

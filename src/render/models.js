@@ -340,7 +340,7 @@ const BUILDERS = {
     return r.root;
   },
   gunner(card, P) {
-    const r = humanoid({ body: '#2a3448', armor: '#7f93b0', skin: P.skin, head: 'visor', headColor: '#8fa3c0' });
+    const r = humanoid({ body: P.dark, armor: card.faction === 'azure' ? '#7f93b0' : P.main, skin: P.skin, head: 'visor', headColor: card.faction === 'azure' ? '#8fa3c0' : '#5a4a42' });
     const cb = new THREE.Group();
     part(G.box(0.05, 0.05, 0.24), metal('#5a6a80'), 0, 0, 0.08, cb);
     part(G.box(0.24, 0.02, 0.03), metal('#c9a64a'), 0, 0.02, 0.17, cb);
@@ -762,6 +762,139 @@ const BUILDERS = {
   },
 };
 
+// ---------------- 拡張カードの模型 ----------------
+Object.assign(BUILDERS, {
+  phoenix(card, P) {
+    const g = BUILDERS.dragon(card, P);
+    // 竜の模型を金と炎の色に塗り替え、炎の尾を足す
+    g.traverse((o) => {
+      if (!o.isMesh || !o.material || !o.material.color) return;
+      const hex = o.material.color.getHexString();
+      if (hex === 'a8221a') o.material = glow('#ff8a1a', 0.9);
+      else if (hex === '6a1410') o.material = glow('#ffcf3a', 1.4);
+      else if (hex === 'f0a050') o.material = glow('#fff07a', 1.2);
+    });
+    g.scale.setScalar(0.85);
+    const anim = g.userData.anim;
+    g.userData.anim = (t) => { anim(t); };
+    g.userData.flying = true;
+    return g;
+  },
+  bear(card, P) {
+    const w = quadruped({ body: '#5a3a24', belly: '#7a5234', legLen: 0.14, long: 1.05, scale: 1.35, neck: -0.04 });
+    for (const sgn of [-1, 1]) part(G.sph(0.022, 6, 4), mat('#4a2e1a'), sgn * 0.04, 0.055, -0.03, w.headP);
+    part(G.box(0.06, 0.05, 0.07), mat('#3a2414'), 0, -0.015, 0.09, w.headP);
+    part(G.sph(0.015, 6, 4), mat('#111'), 0, 0.005, 0.13, w.headP);
+    w.root.userData.anim = (t) => { quadIdle(w, 1.2)(t); w.g.rotation.z = Math.sin(t * 1.2) * 0.03; };
+    return w.root;
+  },
+  wisp(card, P) {
+    const g = new THREE.Group();
+    const core = new THREE.Group();
+    g.add(core);
+    const body = part(G.ico(0.1, 1), glow('#9aff9a', 1.6), 0, 0.42, 0, core);
+    const leaves = [];
+    for (let i = 0; i < 4; i++) {
+      const l = part(G.cone(0.035, 0.14, 4), mat('#4f9a3a'), 0, 0.42, 0, core);
+      leaves.push(l);
+    }
+    for (const sgn of [-1, 1]) part(G.sph(0.016, 6, 4), mat('#103010'), sgn * 0.035, 0.44, 0.085, core);
+    g.userData.anim = (t) => {
+      core.position.y = Math.sin(t * 2.2) * 0.05 + 0.04;
+      body.rotation.y = t;
+      leaves.forEach((l, i) => {
+        const a = t * 1.5 + (i * Math.PI) / 2;
+        l.position.set(Math.cos(a) * 0.15, 0.42 + Math.sin(t * 3 + i) * 0.03, Math.sin(a) * 0.15);
+        l.rotation.z = a;
+      });
+    };
+    g.userData.flying = true;
+    return g;
+  },
+  sapling(card, P) {
+    const g = new THREE.Group();
+    part(G.cyl(0.07, 0.09, 0.06, 8), mat('#6b4a2a'), 0, 0.03, 0, g);
+    const stem = part(G.cyl(0.015, 0.02, 0.2, 5), mat('#5a3e26'), 0, 0.15, 0, g);
+    const top = pivot(g, 0, 0.26, 0);
+    part(G.ico(0.07, 0), mat('#6fbf4a'), 0, 0, 0, top);
+    part(G.ico(0.045, 0), mat('#4f9a3a'), 0.05, -0.03, 0.02, top);
+    part(G.sph(0.012, 5, 4), glow('#fff07a', 2), 0, 0.06, 0.04, top);
+    g.userData.anim = (t) => { top.rotation.z = Math.sin(t * 1.5) * 0.12; stem.rotation.z = Math.sin(t * 1.5) * 0.05; };
+    return g;
+  },
+  wall(card, P) {
+    const g = new THREE.Group();
+    const stone = mat('#8a8478');
+    const dark = mat('#5a564e');
+    for (let r = 0; r < 3; r++) {
+      for (let i = 0; i < 3; i++) {
+        const off = r % 2 ? 0.07 : 0;
+        const b = part(G.box(0.15, 0.12, 0.16), (r + i) % 2 ? stone : dark, -0.16 + i * 0.16 + off - 0.035, 0.07 + r * 0.125, 0, g);
+        b.rotation.y = ((i * 7 + r * 3) % 5 - 2) * 0.03;
+      }
+    }
+    part(G.box(0.5, 0.04, 0.2), mat('#a8a090'), 0, 0.42, 0, g);
+    g.userData.anim = () => {};
+    return g;
+  },
+  drone(card, P) {
+    const g = new THREE.Group();
+    const core = new THREE.Group();
+    g.add(core);
+    part(G.sph(0.08, 10, 8), metal('#8fa3c0'), 0, 0.4, 0, core).scale.y = 0.6;
+    part(G.sph(0.03, 8, 6), glow('#ff4a4a', 2.5), 0, 0.39, 0.07, core);
+    const rotors = [];
+    for (const [x, z] of [[-0.12, -0.12], [0.12, -0.12], [-0.12, 0.12], [0.12, 0.12]]) {
+      part(G.box(0.12, 0.012, 0.012), metal('#3a4658'), x / 2, 0.42, z / 2, core).rotation.y = Math.atan2(z, x);
+      const r = part(G.cyl(0.06, 0.06, 0.006, 10), mat('#cfe8ff', { transparent: true, opacity: 0.5 }), x, 0.45, z, core);
+      rotors.push(r);
+    }
+    g.userData.anim = (t) => { core.position.y = Math.sin(t * 3) * 0.03 + 0.04; core.rotation.y = Math.sin(t * 0.8) * 0.4; rotors.forEach((r) => { r.rotation.y = t * 20; }); };
+    g.userData.flying = true;
+    return g;
+  },
+  rogue(card, P) {
+    const r = humanoid({ body: '#1e1a24', armor: '#2e2838', skin: P.skin, head: 'hood', headColor: '#141018', legs: '#1a161e' });
+    for (const h of [r.handL, r.handR]) {
+      const d = new THREE.Group();
+      part(G.box(0.018, 0.13, 0.008), metal('#dfe4ea'), 0, 0.07, 0, d);
+      part(G.box(0.05, 0.012, 0.02), metal('#8a6a2a'), 0, 0.005, 0, d);
+      h.add(d);
+      d.rotation.x = Math.PI / 2.2;
+    }
+    part(G.box(0.08, 0.015, 0.01), glow('#ff4a6a', 2), 0, 0.5, 0.075, r.g);
+    r.root.userData.anim = (t) => { humanoidIdle(r, 0.4)(t); r.g.position.y = -0.02 + Math.abs(Math.sin(t * 2.5)) * 0.01; };
+    return r.root;
+  },
+  bomber(card, P) {
+    const r = humanoid({ body: P.dark, armor: P.main, skin: P.skin, head: 'redcap', scale: 0.82 });
+    const bomb = new THREE.Group();
+    part(G.sph(0.07, 10, 8), mat('#1a1a1e', { metalness: 0.4, roughness: 0.3 }), 0, 0, 0, bomb);
+    part(G.cyl(0.008, 0.008, 0.06, 4), mat('#c9a64a'), 0, 0.08, 0, bomb);
+    const spark = part(G.sph(0.018, 6, 4), glow('#ffcf3a', 3), 0, 0.115, 0, bomb);
+    bomb.position.set(0.02, -0.02, 0.06);
+    r.handR.add(bomb);
+    r.armR.rotation.x = -0.9;
+    r.root.userData.anim = (t) => { humanoidIdle(r, 0.9)(t); r.armR.rotation.x = -0.9; spark.scale.setScalar(0.7 + Math.random() * 0.8); };
+    return r.root;
+  },
+  titan(card, P) {
+    const g = BUILDERS.mech(card, P);
+    g.scale.setScalar(1.3);
+    return g;
+  },
+  elder(card, P) {
+    const g = BUILDERS.treant(card, P);
+    g.scale.setScalar(1.22);
+    // 白い花をあしらう
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      part(G.sph(0.022, 6, 4), glow('#fff6e0', 1.2), Math.cos(a) * 0.16, 0.66 + (i % 2) * 0.05, Math.sin(a) * 0.16, g);
+    }
+    return g;
+  },
+});
+
 /** カード ID と陣営の色からユニット模型を生成する */
 export function buildUnitModel(cardId) {
   const card = CARDS[cardId];
@@ -791,4 +924,5 @@ export function buildBase(teamColor) {
 export const MODEL_HEIGHT = {
   dragon: 0.85, whale: 0.95, turret: 0.75, giant: 1.05, leader: 0.95, treant: 0.95, stag: 0.95, knight: 0.82,
   imp: 0.75, golem: 0.8, mech: 0.85, cavalry: 0.85, wolf: 0.55, lizard: 0.5, gnome: 0.6, cog: 0.6,
+  phoenix: 0.75, bear: 0.8, wisp: 0.65, sapling: 0.4, wall: 0.5, drone: 0.6, bomber: 0.6, titan: 1.1, elder: 1.15,
 };

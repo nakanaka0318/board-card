@@ -9,7 +9,9 @@ import { MAP_LIST } from './engine/maps.js';
 import { DIFFICULTY } from './engine/ai.js';
 import { cardArt } from './render/cardart.js';
 import { el } from './ui/cardview.js';
-import { openDeckViewer, fillGlossary } from './ui/cardinfo.js';
+import { fillGlossary } from './ui/cardinfo.js';
+import { DeckBuilder } from './ui/deckbuilder.js';
+import { deckOptions, resolveDeck, randomPreset } from './ui/decks.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -25,8 +27,10 @@ function saveSettings() {
   try { localStorage.setItem('arcana-settings', JSON.stringify(settings)); } catch { /* 保存不可でも続行 */ }
 }
 const settings = loadSettings();
-const choice = { mode: 'vsai', faction: 'fire', aiFaction: 'random', diff: 'normal', map: 'classic', first: 'random' };
+const choice = { mode: 'vsai', faction: 'fire', aiFaction: 'random', diff: 'normal', map: 'classic', first: 'random', deck: {} };
 try { Object.assign(choice, JSON.parse(localStorage.getItem('arcana-choice') || '{}')); } catch { /* noop */ }
+if (!choice.deck || typeof choice.deck !== 'object') choice.deck = {};
+const saveChoice = () => { try { localStorage.setItem('arcana-choice', JSON.stringify(choice)); } catch { /* noop */ } };
 
 const sound = new Sound();
 const view = new BoardView($('scene'));
@@ -67,6 +71,8 @@ function buildTitle() {
         sync();
         updateTitleLabels();
         if (key === 'map' || key === 'faction' || key === 'aiFaction') demoBoard();
+        if (key === 'faction') renderDeckPick();
+        saveChoice();
       };
     });
     sync();
@@ -78,6 +84,39 @@ function buildTitle() {
   bind('opt-map', 'map');
   bind('opt-first', 'first');
   updateTitleLabels();
+  renderDeckPick();
+}
+
+// タイトル画面の「使うデッキ」
+function renderDeckPick() {
+  const box = $('opt-deck');
+  box.innerHTML = '';
+  const f = choice.faction;
+  const cur = resolveDeck(f, choice.deck[f]).id;
+  for (const d of deckOptions(f)) {
+    const b = el('button', 'dp-item' + (d.id === cur ? ' sel' : '') + (d.valid ? '' : ' invalid'));
+    b.type = 'button';
+    const status = d.preset ? '構築済み' : d.valid ? 'マイデッキ' : d.cards.length ? `未完成 ${d.cards.length}/30` : '空';
+    b.innerHTML = `<b>${escapeHtml(d.name)}</b><small>${status}</small>`;
+    if (d.desc) b.title = d.desc;
+    b.onclick = () => {
+      sound.resume();
+      if (!d.valid) { deckBuilder.open(f, d.id); return; }
+      sound.play('click');
+      choice.deck[f] = d.id;
+      saveChoice();
+      renderDeckPick();
+    };
+    box.appendChild(b);
+  }
+  const edit = el('button', 'dp-item dp-edit', '<b>✎ 編成する</b><small>カードを入れ替え</small>');
+  edit.type = 'button';
+  edit.onclick = () => { sound.resume(); deckBuilder.open(f, cur); };
+  box.appendChild(edit);
+}
+
+function escapeHtml(t) {
+  return String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 function updateTitleLabels() {
@@ -128,16 +167,21 @@ function showTitle() {
 function startGame() {
   sound.resume();
   sound.play('summon');
-  try { localStorage.setItem('arcana-choice', JSON.stringify(choice)); } catch { /* noop */ }
+  saveChoice();
   $('title-screen').classList.add('hidden');
   $('gameover').classList.add('hidden');
   titleSpin = false;
   if (game) game.abort();
   const watch = choice.mode === 'watch';
+  const aiFaction = pickAIFaction();
+  const myDeck = resolveDeck(choice.faction, choice.deck[choice.faction]);
+  const aiDeck = randomPreset(aiFaction);
   game = new Game({
     view, hud, sound, settings,
     opts: {
-      factions: [choice.faction, pickAIFaction()],
+      factions: [choice.faction, aiFaction],
+      decks: [myDeck.cards, aiDeck.cards],
+      deckNames: [myDeck.name, aiDeck.name],
       diff: choice.diff,
       map: choice.map,
       first: choice.first,
@@ -172,6 +216,7 @@ window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   const openModal = [...document.querySelectorAll('.modal')].reverse().find((m) => !m.classList.contains('hidden') && m.id !== 'gameover');
   if (openModal) { if (k === 'escape') openModal.classList.add('hidden'); return; }
+  if (!$('deck-builder').classList.contains('hidden')) { if (k === 'escape') deckBuilder.close(); return; }
   if (k === 'm') { toggleSound(); return; }
   if (k === 'q') view.rotateView(-1);
   else if (k === 'e') view.rotateView(1);
@@ -188,9 +233,30 @@ $('cam-right').onclick = () => view.rotateView(1);
 $('cam-reset').onclick = () => view.resetView();
 $('cam-top').onclick = () => view.resetView(true);
 $('btn-start').onclick = startGame;
+const deckBuilder = new DeckBuilder({
+  sound,
+  view,
+  toast: (m, ms) => titleToast(m, ms),
+  onUse: (f, id) => {
+    choice.faction = f;
+    choice.deck[f] = id;
+    saveChoice();
+    buildTitle();
+    demoBoard();
+  },
+  onClose: () => renderDeckPick(),
+});
 function titleDeck() {
-  const ids = Object.keys(FACTIONS);
-  openDeckViewer(ids.map((f) => ({ label: FACTIONS[f].name, faction: f })), Math.max(0, ids.indexOf(choice.faction)));
+  sound.resume();
+  deckBuilder.open(choice.faction, resolveDeck(choice.faction, choice.deck[choice.faction]).id);
+}
+// タイトルやデッキ編成画面でも使えるトースト
+function titleToast(msg, ms = 2400) {
+  const t = $('title-toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(titleToast.timer);
+  titleToast.timer = setTimeout(() => t.classList.remove('show'), ms);
 }
 $('btn-title-deck').onclick = titleDeck;
 $('btn-deck').onclick = () => (game ? game.openDeck() : titleDeck());

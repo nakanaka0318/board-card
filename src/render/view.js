@@ -747,6 +747,7 @@ export class BoardView {
   loop() {
     requestAnimationFrame(this.loop);
     const dt = Math.min(0.05, this.clock.getDelta());
+    if (this.paused) return; // 全画面の UI (デッキ編成) を開いている間は描画しない
     this.time += dt;
     const t = this.time;
     this.anim.update(dt);
@@ -969,7 +970,7 @@ export class BoardView {
         this.redrawBadge(uv);
         sfx('buff');
         const pos = this.unitWorldPos(e.uid, 0.1);
-        this.fx.floatText(this.unitWorldPos(e.uid, 0.95), `+${e.dAtk}/+${e.dHp}`, '#ffd24a', 0.45);
+        this.fx.floatText(this.unitWorldPos(e.uid, 0.95), e.label || `+${e.dAtk}/+${e.dHp}`, '#ffd24a', 0.45);
         this.fx.burst(pos, { count: 30, color: '#ffe38a', colorEnd: '#ff8a1a', speed: [0.3, 0.8], dir: new THREE.Vector3(0, 1, 0), spread: 0.2, up: 1.2, life: [0.5, 0.9], size: [0.05, 0.1], area: 0.35 });
         this.fx.ring(this.unitWorldPos(e.uid, 0), '#ffd24a', 0.5, 0.5);
         await A.wait(0.15);
@@ -984,6 +985,22 @@ export class BoardView {
         this.fx.burst(this.unitWorldPos(e.uid, 0.4), { count: 30, color: '#e0f8ff', colorEnd: '#4fbfff', speed: [0.5, 1.5], life: [0.4, 0.8], size: [0.05, 0.12] });
         uv.ice.scale.y = 0.01;
         await A.tween(0.3, (k) => { uv.ice.scale.y = uv.height * 1.3 * k; }, ease.outBack);
+        break;
+      }
+      case 'vanish': {
+        const uv = this.units.get(e.uid);
+        if (!uv) break;
+        sfx('mana');
+        uv.override = true;
+        const p0 = uv.group.position.clone();
+        this.fx.pillar(p0, '#bfe4ff', 3, 0.7, 0.35);
+        this.fx.burst(p0.clone().add(new THREE.Vector3(0, 0.3, 0)), { count: 40, color: '#ffffff', colorEnd: '#7fb8ff', speed: [0.3, 1], up: 1.2, life: [0.5, 0.9], size: [0.05, 0.1] });
+        await A.tween(0.45, (k) => {
+          uv.group.scale.setScalar(Math.max(0.001, 1 - k));
+          uv.group.position.y = p0.y + k * 0.8;
+        }, ease.in);
+        this.world.remove(uv.group);
+        this.units.delete(e.uid);
         break;
       }
       case 'death': {
