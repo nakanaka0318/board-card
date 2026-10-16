@@ -895,6 +895,206 @@ Object.assign(BUILDERS, {
   },
 });
 
+// ---------------- 伝説: 奥義と環境のユニット ----------------
+Object.assign(BUILDERS, {
+  // 煉獄竜王: 黒曜石の鱗と溶岩の割れ目、炎の冠
+  inferno(card, P) {
+    const g = BUILDERS.dragon(card, P);
+    g.traverse((o) => {
+      if (!o.isMesh || !o.material || !o.material.color) return;
+      const hex = o.material.color.getHexString();
+      if (hex === 'a8221a') o.material = mat('#241414', { roughness: 0.4, metalness: 0.3 });
+      else if (hex === '6a1410') o.material = mat('#ff4a12', { emissive: '#ff3a00', emissiveIntensity: 0.9, side: THREE.DoubleSide });
+      else if (hex === 'f0a050') o.material = glow('#ff8a2a', 1.3);
+    });
+    const core = g.children[0];
+    // 背中の溶岩の割れ目
+    for (let i = 0; i < 5; i++) part(G.box(0.012, 0.012, 0.08), glow('#ffb03a', 2.4), (i % 2 ? 1 : -1) * 0.05, 0.5 + (i % 3) * 0.02, 0.12 - i * 0.06, core).rotation.y = (i % 2 ? 0.5 : -0.5);
+    // 炎の冠
+    const crownG = pivot(core, 0, 0.72, 0.27);
+    for (let i = 0; i < 5; i++) {
+      const a = -0.9 + i * 0.45;
+      const h = part(G.cone(0.016, 0.1 + (i === 2 ? 0.05 : 0), 4), glow('#ffcf3a', 2.2), Math.sin(a) * 0.05, 0.02, -Math.cos(a) * 0.04, crownG);
+      h.rotation.x = -0.4;
+    }
+    // 体のまわりを巡る火球
+    const orbs = [];
+    for (let i = 0; i < 3; i++) orbs.push(part(G.sph(0.03, 8, 6), glow('#ff7a1a', 3), 0, 0.45, 0, g));
+    g.scale.setScalar(1.3);
+    const anim = g.userData.anim;
+    g.userData.anim = (t) => {
+      anim(t * 0.8);
+      crownG.position.y = 0.72 + Math.sin(t * 4) * 0.01;
+      orbs.forEach((o, i) => {
+        const a = t * 1.6 + (i * Math.PI * 2) / 3;
+        o.position.set(Math.cos(a) * 0.32, 0.4 + Math.sin(t * 2 + i) * 0.08, Math.sin(a) * 0.32);
+        o.scale.setScalar(0.8 + Math.sin(t * 8 + i) * 0.25);
+      });
+    };
+    g.userData.flying = true;
+    return g;
+  },
+  // 灼天の巫女: 背に回る太陽の円環、太陽の杖
+  sunpriest(card, P) {
+    const r = humanoid({ body: '#a8241a', armor: '#d8a03a', skin: P.skin, robe: true, head: 'halo', headColor: '#ffcf3a' });
+    const disc = pivot(r.g, 0, 0.42, -0.1);
+    part(G.torus(0.2, 0.018, 6, 32), glow('#ffb03a', 2.2), 0, 0, 0, disc);
+    part(G.torus(0.14, 0.008, 4, 24), glow('#fff07a', 2.6), 0, 0, 0, disc);
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const sp = part(G.cone(0.02, 0.08, 4), glow('#ff8a1a', 2), Math.cos(a) * 0.25, Math.sin(a) * 0.25, 0, disc);
+      sp.rotation.z = a - Math.PI / 2;
+    }
+    const staff = new THREE.Group();
+    part(G.cyl(0.012, 0.014, 0.5, 6), metal('#c9a64a'), 0, 0.1, 0, staff);
+    const orb = part(G.sph(0.045, 10, 8), glow('#fff2a0', 3), 0, 0.38, 0, staff);
+    r.handR.add(staff);
+    r.armR.rotation.x = -0.35;
+    r.root.userData.anim = (t) => {
+      humanoidIdle(r, 0.3)(t);
+      r.armR.rotation.x = -0.35;
+      disc.rotation.z = t * 0.6;
+      orb.scale.setScalar(1 + Math.sin(t * 3) * 0.15);
+    };
+    return r.root;
+  },
+  // 世界樹の化身: 太い幹と根、幾重もの樹冠、金色の果実
+  worldtree(card, P) {
+    const g = new THREE.Group();
+    const bark = mat('#5a3a22');
+    const trunk = part(G.cyl(0.08, 0.15, 0.6, 9), bark, 0, 0.3, 0, g);
+    trunk.rotation.y = 0.3;
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const root = part(G.cone(0.05, 0.28, 5), bark, Math.cos(a) * 0.14, 0.05, Math.sin(a) * 0.14, g);
+      root.rotation.z = Math.cos(a) * 1.25;
+      root.rotation.x = -Math.sin(a) * 1.25;
+    }
+    // 顔
+    for (const sgn of [-1, 1]) part(G.sph(0.022, 6, 4), glow('#b8ff7a', 2.5), sgn * 0.04, 0.42, 0.085, g);
+    part(G.box(0.07, 0.012, 0.01), mat('#2a1a0e'), 0, 0.36, 0.09, g);
+    const crown = pivot(g, 0, 0.72, 0);
+    const greens = ['#2f7a2a', '#3f9a34', '#5fbf4a', '#7fd85a'];
+    const blobs = [[0, 0, 0, 0.26], [0.17, -0.06, 0.05, 0.17], [-0.17, -0.05, -0.04, 0.18], [0.04, 0.16, -0.03, 0.17], [-0.06, -0.02, 0.17, 0.15], [0.05, -0.04, -0.18, 0.15]];
+    blobs.forEach(([x, y, z, r], i) => part(G.ico(r, 1), mat(greens[i % greens.length]), x, y, z, crown));
+    const fruits = [];
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      fruits.push(part(G.sph(0.025, 6, 5), glow('#ffd84a', 2), Math.cos(a) * 0.24, -0.08 + (i % 3) * 0.08, Math.sin(a) * 0.24, crown));
+    }
+    // 舞う葉
+    const leaves = [];
+    for (let i = 0; i < 5; i++) leaves.push(part(G.cone(0.02, 0.06, 3), glow('#9aff7a', 1.2), 0, 0, 0, g));
+    g.userData.anim = (t) => {
+      crown.rotation.y = Math.sin(t * 0.4) * 0.12;
+      crown.position.y = 0.72 + Math.sin(t * 0.9) * 0.012;
+      fruits.forEach((f, i) => f.scale.setScalar(0.85 + Math.sin(t * 2 + i) * 0.2));
+      leaves.forEach((l, i) => {
+        const a = t * 0.7 + (i * Math.PI * 2) / 5;
+        l.position.set(Math.cos(a) * 0.38, 0.35 + ((t * 0.25 + i * 0.2) % 1) * 0.6, Math.sin(a) * 0.38);
+        l.rotation.set(t * 2 + i, t + i, 0);
+      });
+    };
+    g.scale.setScalar(1.15);
+    return g;
+  },
+  // 霧雨の精霊王: 雲の冠から雨を降らす水の精霊
+  rainlord(card, P) {
+    const g = new THREE.Group();
+    const core = new THREE.Group();
+    g.add(core);
+    const water = mat('#5fd0c8', { transparent: true, opacity: 0.75, emissive: '#1a8a7a', emissiveIntensity: 0.6, roughness: 0.2 });
+    const body = part(G.cone(0.13, 0.36, 10), water, 0, 0.36, 0, core);
+    body.rotation.x = Math.PI;
+    part(G.sph(0.08, 10, 8), water, 0, 0.6, 0, core);
+    for (const sgn of [-1, 1]) {
+      part(G.sph(0.016, 6, 4), glow('#e8fff8', 3), sgn * 0.03, 0.62, 0.065, core);
+      const arm = part(G.cone(0.03, 0.2, 6), water, sgn * 0.13, 0.46, 0, core);
+      arm.rotation.z = sgn * 2.1;
+    }
+    // 葉の冠と雲
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const l = part(G.cone(0.02, 0.07, 3), mat('#4fbf5a'), Math.cos(a) * 0.07, 0.67, Math.sin(a) * 0.07, core);
+      l.rotation.z = Math.cos(a) * 0.6; l.rotation.x = -Math.sin(a) * 0.6;
+    }
+    const cloud = pivot(core, 0, 0.86, 0);
+    const cm = mat('#eef6f8', { transparent: true, opacity: 0.9 });
+    for (let i = 0; i < 7; i++) part(G.sph(0.06 + (i % 3) * 0.015, 8, 6), cm, Math.cos(i * 0.9) * 0.1, Math.sin(i * 1.7) * 0.02, Math.sin(i * 0.9) * 0.08, cloud);
+    const drops = [];
+    for (let i = 0; i < 9; i++) drops.push(part(G.cyl(0.004, 0.004, 0.05, 3), glow('#bfefff', 1.5), 0, 0, 0, core));
+    g.userData.anim = (t) => {
+      core.position.y = 0.05 + Math.sin(t * 1.6) * 0.035;
+      cloud.rotation.y = t * 0.5;
+      body.rotation.y = t * 0.3;
+      drops.forEach((d, i) => {
+        const k = (t * 0.9 + i / drops.length) % 1;
+        const a = i * 2.4;
+        d.position.set(Math.cos(a) * 0.1, 0.82 - k * 0.8, Math.sin(a) * 0.08);
+        d.visible = k < 0.95;
+      });
+    };
+    g.userData.flying = true;
+    return g;
+  },
+  // 天穹機神: 光輪と浮遊する翼板を従えた巨大な機神
+  astra(card, P) {
+    const g = BUILDERS.mech(card, P);
+    g.scale.setScalar(1.25);
+    const halo = pivot(g, 0, 0.62, -0.12);
+    part(G.torus(0.2, 0.012, 4, 36), glow('#7fe8ff', 2.4), 0, 0, 0, halo);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      part(G.oct(0.022), glow('#d8f8ff', 2.4), Math.cos(a) * 0.2, Math.sin(a) * 0.2, 0, halo);
+    }
+    const plates = [];
+    for (let i = 0; i < 4; i++) {
+      const pl = part(G.box(0.03, 0.16, 0.08), metal('#c8d4e8'), 0, 0, 0, g);
+      part(G.box(0.012, 0.12, 0.012), glow('#7ff4ff', 2), 0.02, 0, 0, pl);
+      plates.push(pl);
+    }
+    const anim = g.userData.anim;
+    g.userData.anim = (t) => {
+      anim(t);
+      halo.rotation.z = t * 0.5;
+      plates.forEach((p, i) => {
+        const a = t * 0.8 + (i * Math.PI) / 2;
+        p.position.set(Math.cos(a) * 0.3, 0.45 + Math.sin(t * 2 + i) * 0.04, Math.sin(a) * 0.3);
+        p.rotation.y = -a;
+      });
+    };
+    return g;
+  },
+  // 星海の観測者: 三日月の杖と、まわりを巡る小さな惑星
+  stargazer(card, P) {
+    const r = humanoid({ body: '#1a2050', armor: '#2c3a80', skin: P.skin, robe: true, head: 'wizard', headColor: '#141a40' });
+    for (let i = 0; i < 6; i++) part(G.oct(0.01), glow('#fff6c0', 2.5), Math.cos(i) * 0.12, 0.12 + i * 0.04, Math.sin(i * 2) * 0.12 + 0.05, r.g);
+    const staff = new THREE.Group();
+    part(G.cyl(0.01, 0.012, 0.5, 6), mat('#c8d0e8', { metalness: 0.6 }), 0, 0.1, 0, staff);
+    const moon = part(G.torus(0.05, 0.012, 4, 16, Math.PI * 1.3), glow('#fff2b0', 2.4), 0, 0.4, 0, staff);
+    moon.rotation.z = 0.8;
+    r.handR.add(staff);
+    r.armR.rotation.x = -0.3;
+    const planets = [['#ff9a6a', 0.035, 0.26, 1.1], ['#7fd8ff', 0.028, 0.34, 0.7], ['#d8a8ff', 0.022, 0.2, 1.6]].map(([c, rad, d, sp]) => {
+      const o = part(G.sph(rad, 10, 8), glow(c, 1.2), 0, 0, 0, r.root);
+      o.userData = { d, sp };
+      return o;
+    });
+    const orbitRing = part(G.torus(0.3, 0.003, 3, 48), glow('#9fb8ff', 1.2), 0, 0.42, 0, r.root);
+    orbitRing.rotation.x = Math.PI / 2.4;
+    r.root.userData.anim = (t) => {
+      humanoidIdle(r, 0.7)(t);
+      r.armR.rotation.x = -0.3;
+      moon.rotation.y = t;
+      planets.forEach((p, i) => {
+        const a = t * p.userData.sp + i * 2;
+        p.position.set(Math.cos(a) * p.userData.d, 0.42 + Math.sin(a) * p.userData.d * 0.35 + i * 0.03, Math.sin(a) * p.userData.d);
+      });
+    };
+    return r.root;
+  },
+});
+
 /** カード ID と陣営の色からユニット模型を生成する */
 export function buildUnitModel(cardId) {
   const card = CARDS[cardId];
@@ -925,4 +1125,5 @@ export const MODEL_HEIGHT = {
   dragon: 0.85, whale: 0.95, turret: 0.75, giant: 1.05, leader: 0.95, treant: 0.95, stag: 0.95, knight: 0.82,
   imp: 0.75, golem: 0.8, mech: 0.85, cavalry: 0.85, wolf: 0.55, lizard: 0.5, gnome: 0.6, cog: 0.6,
   phoenix: 0.75, bear: 0.8, wisp: 0.65, sapling: 0.4, wall: 0.5, drone: 0.6, bomber: 0.6, titan: 1.1, elder: 1.15,
+  inferno: 1.05, sunpriest: 0.8, worldtree: 1.3, rainlord: 1.05, astra: 1.1, stargazer: 0.8,
 };

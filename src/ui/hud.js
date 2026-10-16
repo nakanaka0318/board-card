@@ -1,5 +1,5 @@
 // HTML オーバーレイ (パネル・手札・ログ・AI 思考パネルなど)
-import { CARDS, FACTIONS, TERRAIN, typeName } from '../engine/cards.js';
+import { CARDS, FACTIONS, TERRAIN, ENVIRONMENTS, typeName } from '../engine/cards.js';
 import { canPlay, canHero, TECTONIC_PERIOD, coordName, has, COMMAND_POINTS } from '../engine/rules.js';
 import { renderCard, el, keywordHelp, cardBack, factionName } from './cardview.js';
 import { showCardDetail, onLongPress, targetText } from './cardinfo.js';
@@ -149,6 +149,12 @@ export class HUD {
     const left = state.round <= 1 ? TECTONIC_PERIOD : state.tectonicIn;
     tec.textContent = `⛰ 地殻変動 (${nextKind}) まで ${left} ラウンド`;
     tec.classList.toggle('soon', left <= 1);
+    const envEl = $('env-label');
+    const env = state.envKind && ENVIRONMENTS[state.envKind];
+    if (envEl) {
+      envEl.classList.toggle('hidden', !env);
+      if (env) { envEl.textContent = `${env.icon} 環境「${env.name}」: ${env.text}`; envEl.className = 'env-' + state.envKind; }
+    }
     // 相手の手札
     const eh = $('enemy-hand');
     const opp = ctx.watch ? 1 : 1 - ctx.human;

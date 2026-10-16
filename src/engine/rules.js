@@ -2,7 +2,7 @@
 // applyAction(state, action) が状態を書き換え、state.events (配列なら) に
 // 演出用のイベントを積む。AI のシミュレーションでは events = null で高速に回す。
 
-import { CARDS, FACTIONS, DECKS, TERRAIN } from './cards.js';
+import { CARDS, FACTIONS, DECKS, TERRAIN, ENVIRONMENTS } from './cards.js';
 import { buildMap } from './maps.js';
 import { rand, randInt, shuffle, pick } from './rng.js';
 
@@ -45,6 +45,8 @@ export function createGame(opts) {
     winner: null,
     events: [],
     sim: false,
+    envKind: null,
+    envSeq: 0,
     stats: [newStats(), newStats()],
   };
   s.tiles = buildMap(map, s);
@@ -88,6 +90,8 @@ export function cloneState(s) {
     winner: s.winner,
     events: null,
     sim: true,
+    envKind: s.envKind,
+    envSeq: s.envSeq,
     stats: [newStats(), newStats()],
   };
   return t;
@@ -114,6 +118,7 @@ function makeUnit(s, owner, cardId, x, y) {
     sick: !(c.keywords || []).includes('haste'),
     frozen: false,
     leader: false,
+    skillUsed: false,
   };
 }
 
@@ -137,6 +142,7 @@ export function effAtkAt(s, u, x, y) {
   const t = tileAt(s, x, y);
   if (t.terrain === 'forest' && has(u, 'forestKin')) a += 1;
   if (t.terrain === 'water' && !isFlying(u)) a -= 1;
+  if (s.envKind === 'scorch') a += 1;
   return Math.max(0, a);
 }
 export const effAtk = (s, u) => effAtkAt(s, u, u.x, u.y);
@@ -179,6 +185,7 @@ export function canAct(s, u) {
 export const cpOf = (s, p) => s.players[p].cp ?? COMMAND_POINTS;
 // 将の移動は指揮力を使わない
 export const moveCp = (u) => (u.leader ? 0 : 1);
+export const canSkill = (s, u) => !!(u && CARDS[u.cardId].skill) && canAct(s, u) && !u.attacked && !u.skillUsed && cpOf(s, u.owner) >= 1;
 export const canMove = (s, u) => canAct(s, u) && !u.moved && !u.attacked && cpOf(s, u.owner) >= moveCp(u);
 export const canAttack = (s, u) => canAct(s, u) && !u.attacked && effAtk(s, u) > 0 && cpOf(s, u.owner) >= 1;
 
@@ -199,14 +206,17 @@ export function moveCost(s, u, fx, fy, tx, ty) {
   if (isFlying(u)) return 1;
   const a = tileAt(s, fx, fy), b = tileAt(s, tx, ty);
   const dh = b.height - a.height;
-  if (dh >= 2 || dh <= -2) return Infinity;
+  if ((dh >= 2 || dh <= -2) && s.envKind !== 'zerog') return Infinity;
   if (u.leader) return 1; // 将は地形・1段の段差の影響を受けない
-  return TERRAIN[b.terrain].cost + (dh === 1 ? 1 : 0);
+  return TERRAIN[b.terrain].cost + (dh >= 1 ? 1 : 0);
 }
 
 // ダイクストラ法で移動可能範囲を求める。
 // 戻り値: { cost: Float32Array, prev: Int16Array, tiles: [idx...] (停止可能マス) }
-export function reachable(s, u, budget = u.move) {
+// 環境「無重力の星海」で移動力+1 (動けないユニットは除く)
+export const moveOf = (s, u) => (u.move > 0 && s.envKind === 'zerog' ? u.move + 1 : u.move);
+
+export function reachable(s, u, budget = moveOf(s, u)) {
   const N = W * H;
   const cost = new Float32Array(N).fill(Infinity);
   const prev = new Int16Array(N).fill(-1);
@@ -512,12 +522,24 @@ function cleanupDead(s) {
       if (c.onDeath && !u.leader) c.onDeath(makeApi(s), { self: u, player: u.owner });
     }
   }
+  syncEnv(s);
   const d0 = !s.units.some((u) => u.uid === s.players[0].leader);
   const d1 = !s.units.some((u) => u.uid === s.players[1].leader);
   if ((d0 || d1) && s.winner === null) {
     s.winner = d0 && d1 ? -1 : d0 ? 1 : 0;
     emit(s, { type: 'gameOver', winner: s.winner });
   }
+}
+
+// 場にいる「環境」持ちのうち最後に召喚されたものが有効
+function syncEnv(s) {
+  let best = null;
+  for (const u of s.units) if (u.hp > 0 && u.envSeq && (!best || u.envSeq > best.envSeq)) best = u;
+  const kind = best ? CARDS[best.cardId].env : null;
+  if (kind === s.envKind) return;
+  const prev = s.envKind;
+  s.envKind = kind;
+  emit(s, { type: 'env', kind, prev, uid: best ? best.uid : null, owner: best ? best.owner : null });
 }
 
 function makeApi(s) {
@@ -529,6 +551,17 @@ function makeApi(s) {
     setTerrain: (x, y, t) => setTerrain(s, x, y, t),
     changeHeight: (x, y, d) => changeHeight(s, x, y, d),
     shiftRow: (y, d) => shiftRow(s, y, d),
+    // 盤面全体の地形変化をひとまとめの演出イベントにする
+    fieldWide: (kind, origin, fn) => {
+      const outer = s.events;
+      if (outer) s.events = [];
+      fn();
+      if (outer) {
+        const tiles = s.events.filter((e) => e.type === 'tile');
+        outer.push({ type: 'fieldChange', kind, x: origin.x, y: origin.y, uid: origin.uid, tiles }, ...s.events.filter((e) => e.type !== 'tile'));
+        s.events = outer;
+      }
+    },
     rotateBlock: (x, y, d) => rotateBlock(s, x, y, d),
     push: (u, fx, fy) => push(s, u, fx, fy),
     freeze: (u) => freeze(s, u),
@@ -616,6 +649,9 @@ function startTurn(s) {
     const c = CARDS[u.cardId];
     if (c.onTurnStart) c.onTurnStart(G, { self: u, player: p });
   }
+  if (s.envKind === 'rain') {
+    for (const u of s.units) if (u.owner === p && !u.leader && u.hp > 0) heal(s, u, 1);
+  }
   if (bonus) {
     pl.mana += bonus;
     emit(s, { type: 'crystal', player: p, amount: bonus, mana: pl.mana });
@@ -694,6 +730,7 @@ export function applyAction(s, a) {
       break;
     }
     case 'hero': ok = doHero(s, a); break;
+    case 'skill': ok = doSkill(s, a); break;
     case 'end': endTurn(s); ok = true; break;
   }
   return ok;
@@ -717,6 +754,7 @@ function doPlay(s, a) {
   const G = makeApi(s);
   if (c.type === 'unit') {
     const u = makeUnit(s, p, hc.cardId, a.x, a.y);
+    if (c.env) u.envSeq = ++s.envSeq;
     s.units.push(u);
     s.stats[p].summons++;
     emit(s, { type: 'summon', unit: snapshotUnit(u), tileId: tileAt(s, a.x, a.y).id });
@@ -748,6 +786,21 @@ function doHero(s, a) {
   const target = unitAt(s, a.x, a.y);
   emit(s, { type: 'hero', player: p, fx: h.fx, x: a.x, y: a.y, from: leaderPos(s, p), mana: pl.mana });
   h.effect(makeApi(s), { player: p, x: a.x, y: a.y, target });
+  cleanupDead(s);
+  return true;
+}
+
+// 奥義: 1体につき1回。攻撃の代わりに使い、そのターンの行動を終える
+function doSkill(s, a) {
+  const u = unitById(s, a.uid);
+  if (!u || u.owner !== s.current || !canSkill(s, u)) return false;
+  const sk = CARDS[u.cardId].skill;
+  u.skillUsed = true;
+  u.attacked = true;
+  u.moved = true;
+  spendCp(s, u.owner);
+  emit(s, { type: 'skill', uid: u.uid, player: u.owner, cardId: u.cardId, name: sk.name, fx: sk.fx, x: u.x, y: u.y });
+  sk.effect(makeApi(s), { self: u, player: u.owner });
   cleanupDead(s);
   return true;
 }
@@ -830,6 +883,7 @@ export function hasAnyAction(s, p) {
   if (canHero(s, p)) return true;
   for (const u of s.units) {
     if (u.owner !== p || u.hp <= 0) continue;
+    if (canSkill(s, u)) return true;
     if (canAttack(s, u)) {
       if (targetsFrom(s, u, u.x, u.y).length) return true;
       if (canMove(s, u) && cpOf(s, p) >= moveCp(u) + 1) {

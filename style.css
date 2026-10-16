@@ -159,6 +159,16 @@ button { font-family: inherit; cursor: pointer; }
 .bal-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 50%; background: linear-gradient(90deg, #1a8ac0, var(--p0)); transition: width 0.8s ease; box-shadow: 0 0 8px var(--p0); }
 .bal-mid { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 2px; background: #fff; opacity: 0.6; }
 #tectonic { margin-top: 5px; font-size: 11px; color: #ffcf8a; }
+#env-label { margin-top: 3px; font-size: 11px; font-weight: 700; line-height: 1.35; }
+#env-label.hidden { display: none; }
+#env-label.env-scorch { color: #ffb070; }
+#env-label.env-rain { color: #9fffc0; }
+#env-label.env-zerog { color: #b8c8ff; }
+#banner.env-scorch .b-main { color: #ff9a4a; }
+#banner.env-rain .b-main { color: #8affb0; }
+#banner.env-zerog .b-main { color: #a8bcff; }
+#banner.env-none .b-main { color: #d8ccff; }
+#action-bar button.skill { background: linear-gradient(180deg, #ffd24a, #c8781a); color: #2a1400; border-color: #ffe8a0; box-shadow: 0 0 14px rgba(255, 190, 60, 0.6); animation: et-glow 1.4s infinite; }
 #tectonic.soon { color: #ff8a5a; font-weight: 900; animation: blink 1s infinite; }
 @keyframes blink { 50% { opacity: 0.5; } }
 
@@ -1049,6 +1059,7 @@ body.watch #hand, body.watch #end-turn, body.watch #btn-hint { display: none; }
   #balance { margin-top: 3px; }
   .bal-bar { min-width: 50px; }
   #tectonic { font-size: 9.5px; margin-top: 2px; }
+  #env-label { font-size: 9.5px; margin-top: 1px; }
   #enemy-hand { display: none; }
   #side { top: 124px; right: 6px; left: 6px; width: auto; max-height: none; }
   #ai-panel { padding: 6px 10px; }
@@ -1123,6 +1134,7 @@ body.watch #hand, body.watch #end-turn, body.watch #btn-hint { display: none; }
   #balance { margin-top: 2px; }
   .bal-bar { min-width: 90px; }
   #tectonic { font-size: 9px; margin-top: 1px; }
+  #env-label { font-size: 9px; margin-top: 0; }
   #enemy-hand { display: none; }
   #side { top: 42px; right: 4px; width: 210px; max-height: none; }
   #ai-panel { padding: 5px 9px; }
@@ -1207,6 +1219,7 @@ body.watch #hand, body.watch #end-turn, body.watch #btn-hint { display: none; }
 @keyframes ci-art { 0% { transform: translateX(-160%) scale(1.3); opacity: 0; } 18% { transform: translateX(-110%) scale(1); opacity: 1; } 80% { transform: translateX(-90%) scale(1); opacity: 1; } 100% { transform: translateX(-40%) scale(1.1); opacity: 0; } }
 .sfx-cutin .ci-text { position: absolute; left: 52%; top: 40%; animation: ci-text 1.5s cubic-bezier(.2,.9,.2,1) forwards; }
 .sfx-cutin .ci-tag { font-size: 12px; letter-spacing: 0.5em; color: #ffd24a; font-weight: 900; text-shadow: 0 0 10px #ffb02a; }
+.sfx-cutin .ci-sub { font-size: clamp(11px, 2.4vw, 15px); color: #ffe8b0; font-weight: 700; margin-top: 4px; text-shadow: 0 1px 3px #000; white-space: nowrap; }
 .sfx-cutin .ci-name { font-family: var(--serif); font-size: clamp(26px, 6vw, 52px); font-weight: 900; color: #fff; letter-spacing: 0.12em; text-shadow: 0 0 18px var(--team), 0 2px 4px #000; white-space: nowrap; }
 @keyframes ci-text { 0% { transform: translateX(80%); opacity: 0; } 20% { transform: translateX(0); opacity: 1; } 80% { transform: translateX(-6%); opacity: 1; } 100% { transform: translateX(-30%); opacity: 0; } }
 @media (orientation: portrait) and (max-width: 600px) {

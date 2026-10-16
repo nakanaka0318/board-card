@@ -35,7 +35,7 @@ export function vignette(color = '#ff2040', ms = 700) {
 }
 
 // 伝説カードのカットイン。帯が走り、絵と名前が横切る
-export function cutIn(cardId, owner, speed = 1) {
+export function cutIn(cardId, owner, speed = 1, opts = {}) {
   const c = CARDS[cardId];
   if (!c) return Promise.resolve();
   const ms = 1500 / speed;
@@ -47,7 +47,7 @@ export function cutIn(cardId, owner, speed = 1) {
       <div class="ci-band ci-band2"></div>
       <div class="ci-lines"></div>
       <div class="ci-art"${art ? ` style="background-image:url(${art})"` : ''}>${art ? '' : `<span>${c.icon || '✦'}</span>`}</div>
-      <div class="ci-text"><div class="ci-tag">LEGEND</div><div class="ci-name">${c.name}</div></div>`;
+      <div class="ci-text"><div class="ci-tag">${opts.tag || 'LEGEND'}</div><div class="ci-name">${opts.name || c.name}</div>${opts.sub ? `<div class="ci-sub">${opts.sub}</div>` : ''}</div>`;
     for (const x of d.querySelectorAll('*')) x.style.animationDuration = ms + 'ms';
   });
   return new Promise((r) => setTimeout(r, ms * 0.72));

@@ -9,7 +9,7 @@ import { CARDS, FACTIONS } from './cards.js';
 import {
   W, H, idx, dist, cloneState, applyAction, reachable, targetsFrom, effAtk, effAtkAt, effRangeAt,
   calcDamage, canMove, canAttack, canPlay, canHero, cardTargets, targetsFor, leaderOf, unitAt, tileAt,
-  ignoresLava, isFlying, forecast, coordName, unitById, inEnemyHome, COMMAND_POINTS, cpOf, moveCp,
+  ignoresLava, isFlying, forecast, coordName, unitById, inEnemyHome, COMMAND_POINTS, cpOf, moveCp, canSkill,
 } from './rules.js';
 
 export const DIFFICULTY = {
@@ -239,6 +239,7 @@ export function generateActions(s, p, cfg, opts = {}) {
   // --- ユニット ---
   for (const u of s.units) {
     if (u.owner !== p || u.hp <= 0) continue;
+    if (canSkill(s, u)) acts.push({ type: 'skill', uid: u.uid });
     const atk = canAttack(s, u);
     const mov = canMove(s, u);
     if (!atk && !mov) continue;
@@ -483,6 +484,10 @@ export function describeAction(s, a) {
       const h = FACTIONS[s.players[p].faction].hero;
       return `英雄の力「${h.name}」 → ${coordName(a.x, a.y)}`;
     }
+    case 'skill': {
+      const u = unitById(s, a.uid);
+      return `${u ? unitName(u) : '?'} の奥義「${u ? CARDS[u.cardId].skill.name : ''}」`;
+    }
     case 'end':
       return 'ターン終了';
   }
@@ -518,6 +523,7 @@ export function intentOf(state, result) {
   if (kills >= 2) return { tag: '殲滅', text: `敵ユニット ${kills} 体の撃破を狙う。` };
   if (d1.threatToOp > d0.threatToOp + 2) return { tag: '攻勢', text: '敵リーダーへの包囲網を築く。' };
   if (kills === 1) return { tag: '交戦', text: '有利な交換で戦力を削る。' };
+  if (result.actions.some((a) => a.type === 'skill')) return { tag: '奥義', text: '奥義で戦場そのものを塗り替える。' };
   if (result.actions.some((a) => a.type === 'play')) return { tag: '展開', text: '戦力を展開し盤面を整える。' };
   return { tag: '待機', text: '無理をせず次の機会を窺う。' };
 }

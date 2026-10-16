@@ -31,6 +31,14 @@ export const TERRAIN = {
   shrine: { name: '聖域', cost: 1, desc: 'ターン開始時、ここにいる自分のユニットのHPを2回復。' },
 };
 
+// 環境: 「環境」を持つユニットが場にいる間、盤の外の空模様が変わり、全体のルールが変わる。
+// 複数いる場合は最後に召喚されたものが有効。
+export const ENVIRONMENTS = {
+  scorch: { name: '焦天', icon: '☀️', text: '全ユニット (将を含む) の攻撃力+1。' },
+  rain: { name: '恵みの霧雨', icon: '🌧', text: 'ターン開始時、手番のプレイヤーのユニット (将を除く) すべてのHPを1回復。' },
+  zerog: { name: '無重力の星海', icon: '🌌', text: '全ユニットの移動力+1 (移動力0を除く)。段差2以上の崖も登れる。' },
+};
+
 export const FACTIONS = {
   fire: {
     name: '紅蓮帝国',
@@ -466,6 +474,60 @@ def('f_tsunami', {
 // 強力なカード (デッキに1枚まで)
 for (const id of ['fi_dragon', 'fo_beast', 'az_leviathan']) C[id].legend = true;
 
+// ---------------- 伝説: 奥義 (盤面全体を変える) と 環境 (空とルールを変える) ----------------
+// 奥義: 1体につき1回だけ。攻撃の代わりに使う (指揮力1)。召喚したターンは使えない。
+def('fi_inferno', {
+  name: '煉獄竜王ヴァルガ', faction: 'fire', type: 'unit', cost: 7, atk: 5, hp: 6, move: 2, keywords: ['flying'], model: 'inferno', legend: true,
+  text: '奥義「煉獄変」: 盤面のすべての森と水辺を溶岩に変え、敵ユニットすべてに1ダメージ。',
+  skill: {
+    name: '煉獄変', fx: 'inferno',
+    effect(G, c) {
+      G.fieldWide('inferno', c.self, () => {
+        G.s.tiles.forEach((t, i) => { if (t.terrain === 'forest' || t.terrain === 'water') G.setTerrain(i % 7, (i / 7) | 0, 'lava'); });
+      });
+      for (const u of G.enemyUnits(c.player)) G.damage(u, 1, 'spell');
+    },
+  },
+});
+def('fi_sunpriest', {
+  name: '灼天の巫女', faction: 'fire', type: 'unit', cost: 5, atk: 3, hp: 4, move: 2, range: 2, model: 'sunpriest', legend: true, env: 'scorch',
+  text: '環境「焦天」: 場にいる間、全ユニット (将を含む) の攻撃力+1。',
+});
+def('fo_worldtree', {
+  name: '世界樹の化身', faction: 'forest', type: 'unit', cost: 7, atk: 4, hp: 9, move: 1, keywords: ['guard'], model: 'worldtree', legend: true,
+  text: '奥義「大樹海」: 盤面のすべての平原と溶岩を森に変え、味方すべて (将を含む) のHPを3回復。',
+  skill: {
+    name: '大樹海', fx: 'forest',
+    effect(G, c) {
+      G.fieldWide('forest', c.self, () => {
+        G.s.tiles.forEach((t, i) => { if (t.terrain === 'plain' || t.terrain === 'lava') G.setTerrain(i % 7, (i / 7) | 0, 'forest'); });
+      });
+      for (const u of G.friendlyAll(c.player)) G.heal(u, 3);
+    },
+  },
+});
+def('fo_rainlord', {
+  name: '霧雨の精霊王', faction: 'forest', type: 'unit', cost: 5, atk: 2, hp: 6, move: 2, keywords: ['flying'], model: 'rainlord', legend: true, env: 'rain',
+  text: '環境「恵みの霧雨」: 場にいる間、ターン開始時に手番のプレイヤーのユニット (将を除く) すべてのHPを1回復。',
+});
+def('az_astra', {
+  name: '天穹機神アストラ', faction: 'azure', type: 'unit', cost: 7, atk: 5, hp: 7, move: 2, armor: 1, model: 'astra', legend: true,
+  text: '奥義「天地反転」: 盤面のすべてのマスの高さを反転し (0↔3、1↔2)、敵ユニット (将を除く) をすべて凍結させる。',
+  skill: {
+    name: '天地反転', fx: 'invert',
+    effect(G, c) {
+      G.fieldWide('invert', c.self, () => {
+        G.s.tiles.forEach((t, i) => G.changeHeight(i % 7, (i / 7) | 0, 3 - 2 * t.height));
+      });
+      for (const u of G.enemyUnits(c.player)) G.freeze(u);
+    },
+  },
+});
+def('az_stargazer', {
+  name: '星海の観測者', faction: 'azure', type: 'unit', cost: 5, atk: 2, hp: 5, move: 2, range: 3, model: 'stargazer', legend: true, env: 'zerog',
+  text: '環境「無重力の星海」: 場にいる間、全ユニットの移動力+1 (移動力0を除く)。段差2以上の崖も登れる。',
+});
+
 export const CARDS = C;
 
 // ---------------- デッキ構築ルール ----------------
@@ -506,31 +568,31 @@ export const PRESETS = {
   fire: [
     { id: 'fire_std', name: '紅蓮の進軍', desc: '突撃ユニットと火力で押し切る標準型。', cards: build([
       'fi_imp', 'fi_blade', 'fi_pyro', 'fi_berserker', 'fi_golem', 'fi_salamander', ['fi_dragon', 1],
-      's_fireball', 'f_eruption', 's_warcry', 'n_assassin', 'n_archer', 'n_cavalry', 's_lightning', 'f_uplift', ['fi_guard', 1],
+      's_fireball', 'f_eruption', 's_warcry', 'n_assassin', 'n_archer', 'n_cavalry', ['s_lightning', 1], 'f_uplift', ['fi_guard', 1], ['fi_inferno', 1],
     ]) },
     { id: 'fire_scorch', name: '焦土作戦', desc: '溶岩を広げて爆弾魔と不死鳥で焼き尽くす。', cards: build([
       'fi_imp', 'fi_bomber', 's_ignite', 'fi_golem', 'f_firewall', 'f_eruption', 'fi_salamander', 'fi_cannon', 's_frenzy',
-      ['fi_phoenix', 1], ['s_meteor', 1], 'fi_guard', 'n_spear', 's_fireball', 'n_squire', 'n_archer',
+      ['fi_phoenix', 1], ['s_meteor', 1], 'fi_guard', 'n_spear', 's_fireball', ['n_squire', 1], 'n_archer', ['fi_sunpriest', 1],
     ]) },
   ],
   forest: [
     { id: 'forest_std', name: '翠緑の守り', desc: '森を広げ、回復と強化で盤面を支配する標準型。', cards: build([
       'fo_sprout', 'fo_wolf', 'fo_druid', 'fo_archer', 'fo_priestess', 'fo_treant', ['fo_beast', 1],
-      's_growth', 'f_thorns', 'f_quake', 'n_spear', 'n_archer', 'n_giant', 's_heal', 's_supply', ['fo_bear', 1],
+      's_growth', 'f_thorns', 'f_quake', 'n_spear', 'n_archer', 'n_giant', 's_heal', ['s_supply', 1], ['fo_bear', 1], ['fo_worldtree', 1],
     ]) },
     { id: 'forest_grove', name: '大樹の園', desc: '若木を育て、長老樹と大熊で押し込む成長型。', cards: build([
-      'fo_druid', 'fo_sprout', 'fo_dryad', 'fo_wolf', 'fo_wisp', 'fo_archer', 'n_ogre', 'n_giant', 'fo_bear',
+      'fo_druid', 'fo_sprout', 'fo_dryad', 'fo_wolf', 'fo_wisp', 'fo_archer', ['n_ogre', 1], ['fo_rainlord', 1], 'n_giant', 'fo_bear',
       ['fo_elder', 1], ['fo_beast', 1], 's_bloom', 's_growth', 'fo_priestess', 'fo_treant', 'f_thorns',
     ]) },
   ],
   azure: [
     { id: 'azure_std', name: '蒼穹の機略', desc: '行のずらしと回転で戦場を組み替える標準型。', cards: build([
       'az_cog', 'az_gunner', 'az_tide', 'az_guardian', 'az_turret', ['az_leviathan', 1],
-      's_freeze', 'f_slide', 'f_rotate', 'az_sniper', 'n_squire', 'n_shield', 'n_mage', 's_supply', 'f_uplift', ['az_magnet', 1],
+      's_freeze', 'f_slide', 'f_rotate', 'az_sniper', ['n_squire', 1], ['az_astra', 1], 'n_shield', 'n_mage', 's_supply', 'f_uplift', ['az_magnet', 1],
     ]) },
     { id: 'azure_armor', name: '鋼鉄要塞', desc: '鉄壁の機兵で守り、狙撃と巨神で崩す。', cards: build([
       'az_turret', 'az_cog', 'az_engineer', 'az_gunner', 'az_magnet', 'az_guardian', 'az_sniper', ['az_titan', 1],
-      's_overclock', ['f_maelstrom', 1], 'f_tsunami', 's_freeze', 'n_wall', 'n_scout', 's_smite', 'az_tide',
+      's_overclock', ['f_maelstrom', 1], 'f_tsunami', 's_freeze', 'n_wall', ['n_scout', 1], ['az_stargazer', 1], 's_smite', 'az_tide',
     ]) },
   ],
 };

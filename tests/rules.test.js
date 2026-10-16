@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createGame, cloneState, applyAction, reachable, calcDamage, unitAt, leaderOf, idx, W, H, tileAt, targetsFor,
+  createGame, cloneState, applyAction, reachable, calcDamage, unitAt, leaderOf, idx, W, H, tileAt, targetsFor, effAtk, canSkill,
 } from '../src/engine/rules.js';
 import { MAPS, buildMap } from '../src/engine/maps.js';
 import { CARDS, DECKS } from '../src/engine/cards.js';
@@ -237,4 +237,106 @@ test('将の移動: 指揮力を使わず、森・水辺や1段の段差も1マ�
   s2.players[0].cp = 1;
   assert.ok(applyAction(s2, { type: 'moveAttack', uid: L2.uid, x: 3, y: 3, target: e.uid }));
   assert.equal(s2.players[0].cp, 0);
+});
+
+// 手札に入れて召喚する (onSummon・環境の登録を通すため)
+function summon(s, p, cardId, x, y) {
+  s.players[p].hand.push({ uid: s.nextUid++, cardId });
+  s.players[p].mana = 10;
+  const h = s.players[p].hand[s.players[p].hand.length - 1];
+  assert.ok(applyAction(s, { type: 'play', handUid: h.uid, x, y }), 'summon ' + cardId);
+  return s.units[s.units.length - 1];
+}
+
+test('奥義「煉獄変」: 森と水辺が溶岩に、敵に1ダメージ。1回だけ・召喚ターンは不可', () => {
+  const s = blank();
+  s.events = [];
+  tileAt(s, 0, 3).terrain = 'forest'; tileAt(s, 6, 4).terrain = 'water';
+  const d = summon(s, 0, 'fi_inferno', 3, 1);
+  const e = addUnit(s, 1, 'fi_blade', 5, 5);
+  const hp = e.hp;
+  assert.equal(canSkill(s, d), false, '召喚したターンは使えない');
+  d.sick = false;
+  assert.ok(applyAction(s, { type: 'skill', uid: d.uid }));
+  assert.equal(tileAt(s, 0, 3).terrain, 'lava');
+  assert.equal(tileAt(s, 6, 4).terrain, 'lava');
+  assert.equal(e.hp, hp - 1);
+  assert.equal(s.players[0].cp, 2);
+  assert.ok(s.events.some((ev) => ev.type === 'fieldChange' && ev.tiles.length === 2));
+  assert.ok(!s.events.some((ev) => ev.type === 'tile'), '個別の tile イベントはまとめられる');
+  d.attacked = false;
+  assert.equal(applyAction(s, { type: 'skill', uid: d.uid }), false, '2回目は使えない');
+});
+
+test('奥義「天地反転」: 高さが反転し、敵ユニットが凍結', () => {
+  const s = blank();
+  tileAt(s, 1, 1).height = 3; tileAt(s, 2, 2).height = 1;
+  const a = summon(s, 0, 'az_astra', 3, 1);
+  a.sick = false;
+  const e = addUnit(s, 1, 'fi_blade', 4, 4);
+  assert.ok(applyAction(s, { type: 'skill', uid: a.uid }));
+  assert.equal(tileAt(s, 1, 1).height, 0);
+  assert.equal(tileAt(s, 2, 2).height, 2);
+  assert.equal(tileAt(s, 5, 5).height, 3);
+  assert.ok(e.frozen);
+  assert.ok(!leaderOf(s, 1).frozen, '将は凍結しない');
+});
+
+test('奥義「大樹海」: 平原と溶岩が森に、味方を3回復', () => {
+  const s = blank();
+  tileAt(s, 2, 2).terrain = 'lava'; tileAt(s, 4, 4).terrain = 'water';
+  const t = summon(s, 0, 'fo_worldtree', 3, 1);
+  t.sick = false;
+  leaderOf(s, 0).hp = 10;
+  assert.ok(applyAction(s, { type: 'skill', uid: t.uid }));
+  assert.equal(tileAt(s, 2, 2).terrain, 'forest');
+  assert.equal(tileAt(s, 0, 6).terrain, 'forest');
+  assert.equal(tileAt(s, 4, 4).terrain, 'water');
+  assert.equal(leaderOf(s, 0).hp, 13);
+});
+
+test('環境: 焦天で攻撃力+1、最後に召喚した環境が有効、倒れると戻る', () => {
+  const s = blank();
+  s.events = [];
+  const L = leaderOf(s, 0);
+  assert.equal(effAtk(s, L), 2);
+  const sun = summon(s, 0, 'fi_sunpriest', 2, 1);
+  assert.equal(s.envKind, 'scorch');
+  assert.equal(effAtk(s, L), 3);
+  assert.ok(s.events.some((e) => e.type === 'env' && e.kind === 'scorch'));
+  const star = summon(s, 0, 'az_stargazer', 4, 1);
+  assert.equal(s.envKind, 'zerog');
+  assert.equal(effAtk(s, L), 2);
+  // 無重力: 移動力+1、崖を登れる
+  const u = addUnit(s, 0, 'fi_blade', 0, 3);
+  tileAt(s, 0, 4).height = 3;
+  const r = reachable(s, u);
+  assert.ok(r.tiles.includes(idx(0, 4)), '崖を登れる');
+  assert.ok(r.tiles.includes(idx(0, 5)) || r.tiles.includes(idx(3, 3)), '移動力+1');
+  // 星海の観測者が倒れると焦天に戻り、灼天の巫女も倒れると元に戻る
+  s.current = 1;
+  s.players[1].cp = 3;
+  for (const [target, x] of [[star, 4], [sun, 2]]) {
+    target.hp = 1;
+    const e = addUnit(s, 1, 'fi_blade', x, 2);
+    assert.ok(applyAction(s, { type: 'attack', uid: e.uid, target: target.uid }));
+  }
+  assert.ok(s.events.some((e) => e.type === 'env' && e.kind === 'scorch' && e.prev === 'zerog'));
+  assert.equal(s.envKind, null);
+});
+
+test('環境: 恵みの霧雨でターン開始時に手番側のユニットが1回復', () => {
+  const s = blank();
+  const rl = summon(s, 0, 'fo_rainlord', 2, 1);
+  const a = addUnit(s, 0, 'fi_blade', 3, 3);
+  const b = addUnit(s, 1, 'fi_blade', 3, 5);
+  a.hp = 1; b.hp = 1;
+  leaderOf(s, 0).hp = 10;
+  applyAction(s, { type: 'end' });
+  assert.equal(b.hp, 2, '相手の手番で相手側が回復');
+  assert.equal(a.hp, 1);
+  applyAction(s, { type: 'end' });
+  assert.equal(a.hp, 2);
+  assert.equal(leaderOf(s, 0).hp, 10, '将は回復しない');
+  assert.ok(rl.hp > 0);
 });

@@ -10,6 +10,7 @@ import { CARDS } from '../engine/cards.js';
 import { W, H, idx } from '../engine/rules.js';
 import { Animator, ease } from './tween.js';
 import { FX } from './fx.js';
+import { Atmosphere } from './atmosphere.js';
 import { screenFlash, vignette, cutIn } from '../ui/screenfx.js';
 import { buildUnitModel, buildBase, MODEL_HEIGHT } from './models.js';
 import {
@@ -151,15 +152,19 @@ export class BoardView {
     const skyM = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       depthWrite: false,
-      uniforms: { t: { value: 0 } },
+      uniforms: {
+        t: { value: 0 }, flash: { value: 0 }, aurAmp: { value: 0.5 },
+        topC: { value: new THREE.Vector3() }, midC: { value: new THREE.Vector3() }, lowC: { value: new THREE.Vector3() }, aurC: { value: new THREE.Vector3() },
+      },
       vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
-      fragmentShader: `varying vec3 vP; uniform float t;
+      fragmentShader: `varying vec3 vP; uniform float t; uniform float flash; uniform float aurAmp;
+        uniform vec3 topC; uniform vec3 midC; uniform vec3 lowC; uniform vec3 aurC;
         void main(){ float h = vP.y;
-          vec3 top = vec3(0.03,0.04,0.12); vec3 mid = vec3(0.16,0.10,0.28); vec3 low = vec3(0.05,0.03,0.08);
-          vec3 c = h > 0.0 ? mix(mid, top, pow(h, 0.6)) : mix(mid, low, pow(-h, 0.5));
+          vec3 c = h > 0.0 ? mix(midC, topC, pow(h, 0.6)) : mix(midC, lowC, pow(-h, 0.5));
           float aur = smoothstep(0.05, 0.4, h) * (1.0 - smoothstep(0.4, 0.8, h));
           float wave = 0.5 + 0.5 * sin(vP.x * 6.0 + t * 0.2 + sin(vP.z * 4.0 + t * 0.13) * 2.0);
-          c += vec3(0.05, 0.25, 0.22) * aur * wave * 0.5;
+          c += aurC * aur * wave * aurAmp;
+          c += vec3(0.75, 0.85, 1.0) * flash * (0.4 + 0.6 * smoothstep(-0.2, 0.6, h));
           gl_FragColor = vec4(c, 1.0); }`,
     });
     this.skyMat = skyM;
@@ -181,7 +186,8 @@ export class BoardView {
     this.stars = stars;
 
     // 光源
-    scene.add(new THREE.HemisphereLight('#b8c8ff', '#3a2a24', 0.9));
+    this.hemi = new THREE.HemisphereLight('#b8c8ff', '#3a2a24', 0.9);
+    scene.add(this.hemi);
     const sun = new THREE.DirectionalLight('#ffe6c4', 2.4);
     sun.position.set(5, 12, 6);
     sun.castShadow = true;
@@ -218,6 +224,7 @@ export class BoardView {
 
     this.buildIsland();
     this.buildMotes();
+    this.atmo = new Atmosphere(this);
   }
 
   buildIsland() {
@@ -572,6 +579,7 @@ export class BoardView {
     for (const [uid, uv] of this.units) {
       if (!seen.has(uid)) { this.world.remove(uv.group); this.units.delete(uid); }
     }
+    if ((state.envKind || null) !== this.atmo.target) this.atmo.setEnv(state.envKind, true);
   }
 
   // ------------------------------------------------------------
@@ -796,6 +804,7 @@ export class BoardView {
     this.fx.update(dt);
     this.controls.update();
     this.skyMat.uniforms.t.value = t;
+    this.atmo.update(dt, t);
 
     // テクスチャの流れ
     this.tex.water.offset.set(t * 0.03, t * 0.02);
@@ -810,8 +819,10 @@ export class BoardView {
     for (const r of this.floaters) {
       const d = r.userData;
       const a = d.a + t * d.s;
-      r.position.set(Math.cos(a) * d.d, d.y + Math.sin(t * 0.6 + d.ph) * 0.25, Math.sin(a) * d.d);
+      const lift = this.atmo.lift;
+      r.position.set(Math.cos(a) * d.d, d.y + Math.sin(t * 0.6 + d.ph) * (0.25 + lift * 0.5) + lift * (1.4 + Math.sin(t * 0.3 + d.ph) * 1.2), Math.sin(a) * d.d);
       r.rotation.y = t * d.s * 2;
+      r.rotation.x = lift * t * d.s * 3;
     }
     const mp = this.motes.geometry.attributes.position;
     for (let i = 0; i < mp.count; i++) {
@@ -1158,6 +1169,29 @@ export class BoardView {
       case 'tilesMoved':
         await this.animateTileMoves(e, sfx);
         break;
+      case 'skill':
+        await this.playSkill(e, sfx);
+        break;
+      case 'fieldChange':
+        await this.animateFieldChange(e, sfx);
+        break;
+      case 'env': {
+        // 空模様が切り替わる。環境ユニットから天へ光の柱
+        sfx('env');
+        const uv = e.uid && this.units.get(e.uid);
+        const col = { scorch: '#ff7a2a', rain: '#7dffb0', zerog: '#9fb8ff' }[e.kind] || '#d8ccff';
+        if (uv) {
+          const p = uv.group.position.clone();
+          this.fx.pillar(p, col, 14, 1.6, 0.45);
+          this.fx.ring(p, col, 3.5, 1.2);
+          this.fx.burst(p.clone().add(new THREE.Vector3(0, 0.4, 0)), { count: 90, color: '#ffffff', colorEnd: col, speed: [0.6, 2.4], up: 2.5, life: [0.8, 1.5], size: [0.06, 0.14], drag: 1 });
+        }
+        screenFlash(col, 500, 0.3);
+        this.atmo.setEnv(e.kind);
+        this.doShake(0.12);
+        await A.wait(1.3);
+        break;
+      }
       case 'push': {
         const uv = this.units.get(e.uid);
         if (!uv) break;
@@ -1213,6 +1247,86 @@ export class BoardView {
         break;
       }
     }
+  }
+
+  // 奥義: 力をため、カットインとともに放つ
+  async playSkill(e, sfx) {
+    const A = this.anim;
+    const uv = this.units.get(e.uid);
+    const col = { inferno: '#ff5a1a', forest: '#7dff8a', invert: '#7fe8ff' }[e.fx] || '#ffd24a';
+    sfx('skill');
+    if (!uv) { await cutIn(e.cardId, e.player, A.speed, { tag: '奥義', name: `「${e.name}」`, sub: CARDS[e.cardId].name }); return; }
+    const p0 = uv.group.position.clone();
+    uv.override = true;
+    this.fx.summonCircle(p0, col, 1.4, 2.6);
+    this.fx.rays(p0, col, 2.6);
+    this.fx.burst(p0, { count: 70, color: col, colorEnd: '#ffffff', speed: [0.2, 0.6], up: 1.6, life: [0.6, 1.1], size: [0.05, 0.12], area: 1.2, drag: 1.5 });
+    this.doShake(0.15);
+    const s0 = uv.group.scale.x;
+    const rise = A.tween(0.9, (k) => {
+      uv.group.position.y = p0.y + Math.sin(k * Math.PI * 0.5) * 0.45;
+      uv.facing.rotation.y += 0.12 * (1 - k);
+      uv.group.scale.setScalar(s0 * (1 + k * 0.15));
+    }, ease.out);
+    await cutIn(e.cardId, e.player, A.speed, { tag: '奥義', name: `「${e.name}」`, sub: CARDS[e.cardId].name });
+    await rise;
+    this.fx.flash(p0.clone().add(new THREE.Vector3(0, 0.6, 0)), col, 30, 0.8);
+    this.fx.pillar(p0, col, 10, 1.0, 0.6);
+    screenFlash('#ffffff', 300, 0.5);
+    A.hitStop(120);
+    A.tween(0.4, (k) => {
+      uv.group.position.y = p0.y + 0.45 * (1 - k);
+      uv.group.scale.setScalar(s0 * (1.15 - 0.15 * k));
+    }, ease.in).then(() => { uv.override = false; });
+  }
+
+  // 盤面全体の地形変化: 奥義の主から波紋のように広がる
+  async animateFieldChange(e, sfx) {
+    const A = this.anim;
+    const col = { inferno: '#ff5a1a', forest: '#5fd068', invert: '#7fe8ff' }[e.kind] || '#ffffff';
+    const origin = this.tileWorldPos(e.x, e.y);
+    sfx(e.kind === 'inferno' ? 'explode' : 'quake');
+    this.fx.ring(origin, col, 9, 1.6);
+    this.fx.ring(origin, '#ffffff', 5, 1.0);
+    this.fx.flash(origin, col, 24, 1.2);
+    screenFlash(col, 450, 0.35);
+    this.doShake(e.kind === 'invert' ? 0.45 : 0.35);
+    const items = e.tiles.map((t) => {
+      const tv = this.tiles.get(t.id);
+      return { tv, t, d: Math.hypot(tv.gx - e.x, tv.gy - e.y), h0: tv.h, started: false };
+    }).filter((it) => it.tv);
+    const step = 0.09, dur = e.kind === 'invert' ? 0.7 : 0.45;
+    const total = Math.max(0, ...items.map((it) => it.d)) * step + dur;
+    let lastSfx = -1;
+    await A.tween(total, (k, raw) => {
+      const time = raw * total;
+      for (const it of items) {
+        const lt = (time - it.d * step) / dur;
+        if (lt < 0) continue;
+        const tv = it.tv;
+        if (!it.started) {
+          it.started = true;
+          const ring = Math.round(it.d);
+          if (ring !== lastSfx) { lastSfx = ring; sfx(e.kind === 'invert' ? (it.t.height > it.h0 ? 'rise' : 'sink') : 'terrain'); }
+          if (tv.terrain !== it.t.terrain) this.setTerrain(tv, it.t.terrain);
+          const p = new THREE.Vector3(tv.group.position.x, tv.surface + 0.1, tv.group.position.z);
+          if (e.kind === 'inferno') this.fx.burst(p, { count: 26, color: '#ffef8a', colorEnd: '#ff2a00', speed: [0.8, 2.2], dir: new THREE.Vector3(0, 1, 0), spread: 0.5, life: [0.4, 0.9], size: [0.07, 0.15], gravity: 2, area: 0.4 });
+          else if (e.kind === 'forest') this.fx.burst(p, { count: 22, color: '#c8ff9a', colorEnd: '#2a8a3a', speed: [0.4, 1.4], dir: new THREE.Vector3(0, 1, 0), spread: 0.7, life: [0.6, 1.1], size: [0.06, 0.12], gravity: 0.6, area: 0.45 });
+          else this.fx.burst(p, { count: 16, color: '#ffffff', colorEnd: col, speed: [0.3, 1], up: 0.8, life: [0.5, 0.9], size: [0.05, 0.1], area: 0.45, drag: 1 });
+        }
+        if (it.h0 !== it.t.height) {
+          const kk = lt >= 1 ? 1 : ease.outBack(lt);
+          tv.h = it.h0 + (it.t.height - it.h0) * kk;
+          this.applyHeight(tv);
+        } else if (lt < 1) {
+          // 変化したマスは一度跳ねる
+          tv.lift = Math.sin(lt * Math.PI) * 0.18;
+          this.applyHeight(tv);
+        } else if (tv.lift) { tv.lift = 0; this.applyHeight(tv); }
+      }
+    }, ease.linear);
+    for (const it of items) { it.tv.h = it.t.height; it.tv.lift = 0; this.applyHeight(it.tv); }
+    await A.wait(0.2);
   }
 
   async animateTileMoves(e, sfx) {

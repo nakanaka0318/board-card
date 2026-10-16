@@ -1,7 +1,7 @@
 // 対局の進行役: ルールエンジン・3D ビュー・HUD・AI をつなぐ。
-import { CARDS, FACTIONS } from './engine/cards.js';
+import { CARDS, FACTIONS, ENVIRONMENTS } from './engine/cards.js';
 import {
-  W, H, idx, dist, createGame, applyAction, reachable, pathTo, targetsFrom, canMove, canAttack, canPlay, cpOf, moveCp, COMMAND_POINTS,
+  W, H, idx, dist, createGame, applyAction, reachable, pathTo, targetsFrom, canMove, canAttack, canPlay, cpOf, moveCp, canSkill, COMMAND_POINTS,
   canHero, cardTargets, targetsFor, unitAt, unitById, forecast, hasAnyAction, effRangeAt, tileAt, coordName,
 } from './engine/rules.js';
 import { DIFFICULTY, planTurn, describePlan, intentOf, evaluate, winProb, threatMap } from './engine/ai.js';
@@ -196,6 +196,21 @@ export class Game {
         case 'fx':
           if (e.kind === 'siege') this.hud.addLog(`${this.unitName(e.from.uid)} が敵陣を侵攻! 敵の将に1ダメージ`, 'p' + this.ownerOf(e.from.uid));
           break;
+        case 'skill':
+          this.hud.addLog(`${this.unitName(e.uid)} の奥義「${e.name}」!`, 'p' + e.player);
+          break;
+        case 'env': {
+          const env = e.kind && ENVIRONMENTS[e.kind];
+          if (env) {
+            this.hud.addLog(`${env.icon} 環境「${env.name}」: ${env.text}`, 'sys');
+            this.hud.banner(`${env.icon} ${env.name}`, env.text, 'env-' + e.kind, 2200 / speed);
+          } else {
+            this.hud.addLog('空模様が元に戻った (環境の効果が消えた)', 'sys');
+            this.hud.banner('環境が元に戻った', '', 'env-none', 1400 / speed);
+          }
+          this.refreshUI();
+          break;
+        }
         case 'tectonic':
           this.hud.addLog(e.kind === 'ring' ? '⛰ 地殻変動! 中央の大地が回転する' : '⛰ 地殻変動! 大地が隆起し、沈降する', 'sys');
           await this.hud.banner('地殻変動', e.kind === 'ring' ? '中央の大地が回転する' : '大地が隆起し、沈降する', 'quake', 1700 / speed);
@@ -427,7 +442,7 @@ export class Game {
     this.view.setSelectedUnit(null);
     this.view.clearPath();
     this.hud.tooltip(0, 0, null);
-    if (update) { this.updateHighlights(); this.refreshUI(); }
+    if (update) { this.updateHighlights(); this.refreshUI(); } else this.hud.setActionBar(null);
   }
 
   updateHighlights() {
@@ -473,7 +488,7 @@ export class Game {
     if (this.human === null) return [];
     // 将は移動が自由なので、攻撃できる時だけ数える
     return s.units.filter((u) => u.owner === this.human && u.hp > 0
-      && ((!u.leader && canMove(s, u)) || (canAttack(s, u) && targetsFrom(s, u, u.x, u.y).length)));
+      && ((!u.leader && canMove(s, u)) || canSkill(s, u) || (canAttack(s, u) && targetsFrom(s, u, u.x, u.y).length)));
   }
 
   // 敵ユニットの範囲表示を切り替える
@@ -623,7 +638,7 @@ export class Game {
 
   trySelectUnit(u) {
     const s = this.state;
-    if (canMove(s, u) || (canAttack(s, u) && targetsFrom(s, u, u.x, u.y).length)) {
+    if (canMove(s, u) || canSkill(s, u) || (canAttack(s, u) && targetsFrom(s, u, u.x, u.y).length)) {
       // 選択中は下の案内バーに情報が出るので、上の簡易表示は閉じる
       this.hud.hideInspector(true);
       return this.selectUnit(u);
@@ -711,7 +726,11 @@ export class Game {
       this.hud.setActionBar({
         title: `${name} <small>⚔${u.atk} ❤${u.hp}</small>`,
         hint: parts.length > 1 ? parts.slice(0, -1).join(' / ') + '<br>' + parts[parts.length - 1] : 'このターンにできることはありません / ' + parts[0],
-        buttons: [{ label: '詳細', onClick: () => showCardDetail(u.cardId, { unit: u, state: s, ownerName: this.names[u.owner] }) }, { label: '選択解除', onClick: cancel.onClick }],
+        buttons: [
+          ...(canSkill(s, u) ? [{ label: `★ 奥義「${CARDS[u.cardId].skill.name}」`, cls: 'primary skill', onClick: () => this.perform({ type: 'skill', uid: u.uid }) }] : []),
+          { label: '詳細', onClick: () => showCardDetail(u.cardId, { unit: u, state: s, ownerName: this.names[u.owner] }) },
+          { label: '選択解除', onClick: cancel.onClick },
+        ],
       });
     }
   }
