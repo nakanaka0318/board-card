@@ -38,6 +38,10 @@ export class HUD {
   setupPanels(state, names, handlers) {
     this.names = names;
     this.handlers = handlers;
+    // 新しい対局: 前の対局の手札の要素を捨てる
+    for (const c of this.handCards.values()) c.remove();
+    this.handCards.clear();
+    this.hand.innerHTML = '';
     for (let p = 0; p < 2; p++) {
       const f = state.players[p].faction;
       const F = FACTIONS[f];
@@ -196,6 +200,8 @@ export class HUD {
     const spacing = Math.min(cw - 10, (width - cw - 60) / Math.max(1, n - 1));
     pl.hand.forEach((h, i) => {
       let c = this.handCards.get(h.uid);
+      // 手札の uid は対局ごとに 1 から振り直されるので、別のカードの要素を使い回さないよう確かめる
+      if (c && c.dataset.cardId !== h.cardId) { c.remove(); this.handCards.delete(h.uid); c = null; }
       if (!c) {
         c = renderCard(h.cardId);
         c.classList.add('drawn');

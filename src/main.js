@@ -13,6 +13,7 @@ import { fillGlossary } from './ui/cardinfo.js';
 import { DeckBuilder } from './ui/deckbuilder.js';
 import { openChangelog, updateBadges } from './ui/changelog.js';
 import { deckOptions, resolveDeck, randomPreset } from './ui/decks.js';
+import { initTuck, refreshTuck } from './ui/tuck.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -36,6 +37,7 @@ const saveChoice = () => { try { localStorage.setItem('arcana-choice', JSON.stri
 const sound = new Sound();
 const view = new BoardView($('scene'));
 const hud = new HUD();
+initTuck({ onFirst: () => hud.toast('しまいました。画面の端に残る「つまみ」をタップすると元に戻ります', 3200) });
 let game = null;
 let titleSpin = true;
 
@@ -193,6 +195,7 @@ function startGame() {
   hud.show(true);
   view.setBadges(true);
   game.start();
+  requestAnimationFrame(() => refreshTuck());
   if (settings.music) sound.startMusic();
 }
 
