@@ -1179,7 +1179,7 @@ export class BoardView {
         // 空模様が切り替わる。環境ユニットから天へ光の柱
         sfx('env');
         const uv = e.uid && this.units.get(e.uid);
-        const col = { scorch: '#ff7a2a', rain: '#7dffb0', zerog: '#9fb8ff' }[e.kind] || '#d8ccff';
+        const col = { scorch: '#ff7a2a', rain: '#7dffb0', zerog: '#9fb8ff', lab: '#c9a6ff' }[e.kind] || '#d8ccff';
         if (uv) {
           const p = uv.group.position.clone();
           this.fx.pillar(p, col, 14, 1.6, 0.45);
@@ -1253,7 +1253,7 @@ export class BoardView {
   async playSkill(e, sfx) {
     const A = this.anim;
     const uv = this.units.get(e.uid);
-    const col = { inferno: '#ff5a1a', forest: '#7dff8a', invert: '#7fe8ff' }[e.fx] || '#ffd24a';
+    const col = { inferno: '#ff5a1a', forest: '#7dff8a', invert: '#7fe8ff', discharge: '#c9a6ff' }[e.fx] || '#ffd24a';
     sfx('skill');
     if (!uv) { await cutIn(e.cardId, e.player, A.speed, { tag: '奥義', name: `「${e.name}」`, sub: CARDS[e.cardId].name }); return; }
     const p0 = uv.group.position.clone();
@@ -1283,7 +1283,7 @@ export class BoardView {
   // 盤面全体の地形変化: 奥義の主から波紋のように広がる
   async animateFieldChange(e, sfx) {
     const A = this.anim;
-    const col = { inferno: '#ff5a1a', forest: '#5fd068', invert: '#7fe8ff' }[e.kind] || '#ffffff';
+    const col = { inferno: '#ff5a1a', forest: '#5fd068', invert: '#7fe8ff', discharge: '#c9a6ff' }[e.kind] || '#ffffff';
     const origin = this.tileWorldPos(e.x, e.y);
     sfx(e.kind === 'inferno' ? 'explode' : 'quake');
     this.fx.ring(origin, col, 9, 1.6);
@@ -1311,6 +1311,7 @@ export class BoardView {
           if (tv.terrain !== it.t.terrain) this.setTerrain(tv, it.t.terrain);
           const p = new THREE.Vector3(tv.group.position.x, tv.surface + 0.1, tv.group.position.z);
           if (e.kind === 'inferno') this.fx.burst(p, { count: 26, color: '#ffef8a', colorEnd: '#ff2a00', speed: [0.8, 2.2], dir: new THREE.Vector3(0, 1, 0), spread: 0.5, life: [0.4, 0.9], size: [0.07, 0.15], gravity: 2, area: 0.4 });
+          else if (e.kind === 'discharge') { this.fx.lightning(p.clone().add(new THREE.Vector3(0, 0.2, 0)), '#d8c8ff'); this.fx.burst(p, { count: 14, color: '#ffffff', colorEnd: '#9a6aff', speed: [0.6, 1.8], life: [0.2, 0.5], size: [0.05, 0.1], area: 0.4 }); }
           else if (e.kind === 'forest') this.fx.burst(p, { count: 22, color: '#c8ff9a', colorEnd: '#2a8a3a', speed: [0.4, 1.4], dir: new THREE.Vector3(0, 1, 0), spread: 0.7, life: [0.6, 1.1], size: [0.06, 0.12], gravity: 0.6, area: 0.45 });
           else this.fx.burst(p, { count: 16, color: '#ffffff', colorEnd: col, speed: [0.3, 1], up: 0.8, life: [0.5, 0.9], size: [0.05, 0.1], area: 0.45, drag: 1 });
         }
@@ -1449,6 +1450,17 @@ export class BoardView {
         if (from) this.fx.burst(this.unitWorldPos(e.from.uid, 0.5), { count: 30, color: '#9fd8ff', colorEnd: '#6a4cff', speed: [0.3, 1], up: 0.8, life: [0.5, 1], size: [0.06, 0.1], area: 0.3 });
         await A.wait(0.3);
         break;
+      case 'crow': {
+        // 黒い羽と稲光が術者から舞い上がる
+        sfx('thunder');
+        if (from) {
+          this.fx.burst(from, { count: 60, color: '#3a2a4a', colorEnd: '#0a0610', speed: [0.6, 2], up: 1.2, life: [0.6, 1.2], size: [0.07, 0.14], drag: 1.2 });
+          this.fx.flash(from, '#b48aff', 10, 0.5);
+        }
+        this.doShake(0.12);
+        await A.wait(0.35);
+        break;
+      }
       case 'raise':
       case 'lower':
       case 'quake':

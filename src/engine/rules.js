@@ -523,11 +523,52 @@ function cleanupDead(s) {
     }
   }
   syncEnv(s);
+  syncLab(s);
   const d0 = !s.units.some((u) => u.uid === s.players[0].leader);
   const d1 = !s.units.some((u) => u.uid === s.players[1].leader);
   if ((d0 || d1) && s.winner === null) {
     s.winner = d0 && d1 ? -1 : d0 ? 1 : 0;
     emit(s, { type: 'gameOver', winner: s.winner });
+  }
+}
+
+// 「没入の実験体」(とその派生) かどうか
+export const isSubject = (u) => !!CARDS[u.cardId].subject;
+
+// ユニットを場に出す。x を省略するとランダムな空きマス
+function spawnUnit(s, p, cardId, x, y) {
+  if (x === undefined) {
+    const empty = [];
+    for (let i = 0; i < W * H; i++) if (!unitAt(s, i % W, (i / W) | 0)) empty.push(i);
+    if (!empty.length) return null;
+    const i = pick(s, empty);
+    x = i % W; y = (i / W) | 0;
+  }
+  if (!inBounds(x, y) || unitAt(s, x, y)) return null;
+  const c = CARDS[cardId];
+  const u = makeUnit(s, p, cardId, x, y);
+  if (c.env) u.envSeq = ++s.envSeq;
+  s.units.push(u);
+  emit(s, { type: 'summon', unit: snapshotUnit(u), tileId: tileAt(s, x, y).id, spawned: true });
+  if (c.onSummon) c.onSummon(makeApi(s), { self: u, player: p });
+  return u;
+}
+
+// 環境「研究室」: 場の「没入の実験体」すべて+2/+2 (環境が消えると元に戻る)
+const LAB_BONUS = 2;
+function syncLab(s) {
+  const on = s.envKind === 'lab';
+  for (const u of s.units) {
+    if (u.hp <= 0 || !isSubject(u)) continue;
+    if (on && !u.labBuff) {
+      u.labBuff = true;
+      u.atk += LAB_BONUS; u.maxHp += LAB_BONUS; u.hp += LAB_BONUS;
+      emit(s, { type: 'buff', uid: u.uid, atk: u.atk, hp: u.hp, dAtk: LAB_BONUS, dHp: LAB_BONUS, label: '研究室 +2/+2' });
+    } else if (!on && u.labBuff) {
+      u.labBuff = false;
+      u.atk -= LAB_BONUS; u.maxHp -= LAB_BONUS; u.hp = Math.min(u.hp, u.maxHp);
+      emit(s, { type: 'buff', uid: u.uid, atk: u.atk, hp: u.hp, dAtk: -LAB_BONUS, dHp: -LAB_BONUS, label: '研究室の効果が消えた' });
+    }
   }
 }
 
@@ -589,6 +630,10 @@ function makeApi(s) {
     // (x,y) の方向へ 1 マス引き寄せる
     pull: (u, x, y) => push(s, u, 2 * u.x - x, 2 * u.y - y),
     friendlyAll: (p) => s.units.filter((u) => u.hp > 0 && u.owner === p),
+    // ユニットを出す (x を省略するとランダムな空きマス)
+    spawn: (p, cardId, x, y) => spawnUnit(s, p, cardId, x, y),
+    enemyAll: (p) => s.units.filter((u) => u.hp > 0 && u.owner !== p),
+    subjects: () => s.units.filter((u) => u.hp > 0 && isSubject(u)),
     unitAt: (x, y) => unitAt(s, x, y),
     leaderOf: (p) => leaderOf(s, p),
     enemyUnits: (p) => s.units.filter((u) => u.hp > 0 && u.owner !== p && !u.leader),
@@ -673,6 +718,14 @@ function startTurn(s) {
 function endTurn(s) {
   const p = s.current;
   emit(s, { type: 'turnEnd', player: p });
+  const G = makeApi(s);
+  for (const u of s.units.slice()) {
+    if (u.owner !== p || u.hp <= 0) continue;
+    const c = CARDS[u.cardId];
+    if (c.onTurnEnd) c.onTurnEnd(G, { self: u, player: p });
+  }
+  cleanupDead(s);
+  if (s.winner !== null) return;
   for (const u of s.units.slice()) {
     if (u.owner !== p || u.hp <= 0) continue;
     if (tileAt(s, u.x, u.y).terrain === 'lava' && !ignoresLava(u)) {

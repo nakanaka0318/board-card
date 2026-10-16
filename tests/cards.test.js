@@ -102,7 +102,8 @@ test('撤退命令でユニットが手札に戻る', () => {
 test('完全下位互換のユニットが存在しない', () => {
   // x が y と同じデッキに入れられ、コストが同じか高く、能力値・キーワードがすべて y 以下で、
   // 固有の効果も持たないなら x は y の完全下位互換
-  const units = Object.values(CARDS).filter((c) => c.type === 'unit');
+  // デッキに入れられない派生カード (token) は比較しない
+  const units = Object.values(CARDS).filter((c) => c.type === 'unit' && !c.token);
   const hasFx = (c) => !!(c.onSummon || c.onDeath || c.onTurnStart || c.text);
   const shareDeck = (a, b) => a.faction === 'neutral' || b.faction === 'neutral' || a.faction === b.faction;
   const found = [];

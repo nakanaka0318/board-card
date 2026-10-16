@@ -14,6 +14,7 @@ import { DeckBuilder } from './ui/deckbuilder.js';
 import { openChangelog, updateBadges } from './ui/changelog.js';
 import { deckOptions, resolveDeck, randomPreset } from './ui/decks.js';
 import { initTuck, refreshTuck } from './ui/tuck.js';
+import { openTier, renderTierBanner } from './ui/tier.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -142,6 +143,7 @@ function demoBoard() {
   // 見栄えのため何体か並べる
   const demo = {
     fire: ['fi_dragon', 'fi_golem', 'fi_imp'], forest: ['fo_beast', 'fo_treant', 'fo_wolf'], azure: ['az_leviathan', 'az_guardian', 'az_turret'],
+    lab: ['lb_sephy', 'lb_germ', 'lb_subject'],
   };
   const put = (p, ids, row) => ids.forEach((id, i) => {
     const x = [1, 3, 5][i];
@@ -265,6 +267,9 @@ function titleToast(msg, ms = 2400) {
 $('btn-title-deck').onclick = titleDeck;
 $('btn-title-changelog').onclick = () => { sound.resume(); openChangelog(); };
 $('btn-changelog').onclick = () => openChangelog();
+$('btn-tier').onclick = () => openTier();
+$('btn-title-tier').onclick = () => { sound.resume(); openTier(); };
+$('title-tier').onclick = () => { sound.resume(); openTier(); };
 $('btn-deck').onclick = () => (game ? game.openDeck() : titleDeck());
 function toggleSound() {
   settings.sound = !settings.sound;
@@ -365,6 +370,7 @@ async function boot() {
   bindSettings();
   updateSoundBtn();
   updateBadges();
+  renderTierBanner();
   fillGlossary();
   buildTitle();
   showTitle();

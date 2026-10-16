@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { makeGlowTexture } from './textures.js';
 
-const KINDS = ['scorch', 'rain', 'zerog'];
+const KINDS = ['scorch', 'rain', 'zerog', 'lab'];
 
 const v3 = (r, g, b) => new THREE.Vector3(r, g, b);
 const PALETTES = {
@@ -27,6 +27,12 @@ const PALETTES = {
     hemi: new THREE.Color('#c8ffe4'), hemiI: 0.85, sun: new THREE.Color('#d8ffe8'), sunI: 1.7,
     ring: new THREE.Color('#7dff9a'), mote: new THREE.Color('#b8ffb8'), stars: 0.05,
   },
+  lab: {
+    top: v3(0.03, 0.0, 0.06), mid: v3(0.14, 0.05, 0.26), low: v3(0.02, 0.0, 0.05), aur: v3(0.4, 1.0, 0.85), aurAmp: 1.1,
+    fog: new THREE.Color('#1a0e2e'), fogD: 0.03, bg: new THREE.Color('#06030c'),
+    hemi: new THREE.Color('#c8b0ff'), hemiI: 0.85, sun: new THREE.Color('#d8c8ff'), sunI: 2.0,
+    ring: new THREE.Color('#7fffd8'), mote: new THREE.Color('#9affe8'), stars: 0.2,
+  },
   zerog: {
     top: v3(0.0, 0.0, 0.03), mid: v3(0.05, 0.05, 0.22), low: v3(0.0, 0.0, 0.05), aur: v3(0.35, 0.25, 1.0), aurAmp: 1.4,
     fog: new THREE.Color('#0a0a2a'), fogD: 0.012, bg: new THREE.Color('#02020a'),
@@ -39,7 +45,7 @@ export class Atmosphere {
   constructor(view) {
     this.v = view;
     this.target = null;
-    this.w = { scorch: 0, rain: 0, zerog: 0 };
+    this.w = { scorch: 0, rain: 0, zerog: 0, lab: 0 };
     this.flash = 0;
     const scene = view.scene;
     const glowTex = makeGlowTexture();
@@ -96,6 +102,10 @@ export class Atmosphere {
     pg.visible = false;
     scene.add(pg);
     this.planet = pg;
+    // --- 研究室: 宙を走る火花 ---
+    this.sparks = this.makePoints(320, '#9affe8', 0.07, (p) => {
+      p.x = (Math.random() - 0.5) * 18; p.y = Math.random() * 8 - 3; p.z = (Math.random() - 0.5) * 18;
+    });
     this.dust = this.makePoints(380, '#bfe4ff', 0.08, (p) => {
       p.x = (Math.random() - 0.5) * 22; p.y = Math.random() * 12 - 4; p.z = (Math.random() - 0.5) * 22;
     });
@@ -145,7 +155,7 @@ export class Atmosphere {
   apply(dt, t = 0) {
     const v = this.v, w = this.w;
     const B = PALETTES.base;
-    const rest = Math.max(0, 1 - w.scorch - w.rain - w.zerog);
+    const rest = Math.max(0, 1 - w.scorch - w.rain - w.zerog - w.lab);
     const mixV = (key) => {
       const out = B[key].clone().multiplyScalar(rest);
       for (const k of KINDS) if (w[k]) out.addScaledVector(PALETTES[k][key], w[k]);
@@ -167,7 +177,8 @@ export class Atmosphere {
     // 稲光
     if (this.flash > 0) this.flash = Math.max(0, this.flash - dt * 2.5);
     if (w.rain > 0.5 && Math.random() < dt * 0.08) this.flash = 1;
-    const fl = this.flash * w.rain;
+    if (w.lab > 0.5 && Math.random() < dt * 0.25) this.flash = 0.7; // 研究室: 放電の明滅
+    const fl = this.flash * Math.max(w.rain, w.lab);
     u.flash.value = fl;
 
     v.scene.fog.color.copy(mixC('fog'));
@@ -204,6 +215,7 @@ export class Atmosphere {
       }
       this.rain.geometry.attributes.position.needsUpdate = true;
     }
+    this.stepSparks(dt, t);
     // 惑星と星屑 (ゆっくり上昇し、無重力を感じさせる)
     this.planet.visible = w.zerog > 0.01;
     this.planetM.uniforms.op.value = w.zerog;
@@ -213,6 +225,19 @@ export class Atmosphere {
       pos[i * 3 + 1] += dt * (0.15 + seed * 0.35);
       pos[i * 3] += Math.sin(t * 0.4 + seed * 30) * dt * 0.15;
       if (pos[i * 3 + 1] > 8) { pos[i * 3 + 1] = -4; pos[i * 3] = (Math.random() - 0.5) * 22; pos[i * 3 + 2] = (Math.random() - 0.5) * 22; }
+    });
+  }
+
+  stepSparks(dt, t) {
+    this.stepPoints(this.sparks, this.w.lab, dt, (pos, i, seed) => {
+      // ふだんはゆっくり漂い、ときどき跳ねる
+      const jump = Math.sin(t * (3 + seed * 5) + seed * 40) > 0.97 ? 1.2 : 0.06;
+      pos[i * 3] += (Math.random() - 0.5) * jump;
+      pos[i * 3 + 1] += dt * (0.3 + seed * 0.5) + (Math.random() - 0.5) * jump * 0.5;
+      pos[i * 3 + 2] += (Math.random() - 0.5) * jump;
+      if (pos[i * 3 + 1] > 6 || Math.abs(pos[i * 3]) > 10 || Math.abs(pos[i * 3 + 2]) > 10) {
+        pos[i * 3] = (Math.random() - 0.5) * 18; pos[i * 3 + 1] = -3; pos[i * 3 + 2] = (Math.random() - 0.5) * 18;
+      }
     });
   }
 

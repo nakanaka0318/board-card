@@ -37,6 +37,7 @@ export const ENVIRONMENTS = {
   scorch: { name: '焦天', icon: '☀️', text: '全ユニット (将を含む) の攻撃力+1。' },
   rain: { name: '恵みの霧雨', icon: '🌧', text: 'ターン開始時、手番のプレイヤーのユニット (将を除く) すべてのHPを1回復。' },
   zerog: { name: '無重力の星海', icon: '🌌', text: '全ユニットの移動力+1 (移動力0を除く)。段差2以上の崖も登れる。' },
+  lab: { name: '研究室', icon: '🧪', text: '「没入の実験体」すべて+2/+2。' },
 };
 
 export const FACTIONS = {
@@ -89,6 +90,22 @@ export const FACTIONS = {
         const L = G.leaderOf(c.player);
         G.push(c.target, L.x, L.y);
       },
+    },
+  },
+  lab: {
+    name: '雷研究室',
+    short: '雷研',
+    color: '#a98bff',
+    desc: '雷と人体実験の研究所。「没入の実験体」を次々と送り出し、数で押し潰す。',
+    emblem: '⚡',
+    palette: { main: '#3a2f6a', accent: '#ffe14a', dark: '#1e1a33', skin: '#d8c0a8' },
+    hero: {
+      name: '被験体投入',
+      cost: 2,
+      target: 'summon',
+      text: '「没入の実験体」を1体出す (自陣か将の周囲の空きマス)。',
+      fx: 'mana',
+      effect(G, c) { G.spawn(c.player, 'lb_subject', c.x, c.y); },
     },
   },
 };
@@ -528,6 +545,160 @@ def('az_stargazer', {
   text: '環境「無重力の星海」: 場にいる間、全ユニットの移動力+1 (移動力0を除く)。段差2以上の崖も登れる。',
 });
 
+// ---------------- 雷研究室 ----------------
+// 「没入の実験体」: subject: true を持つカードはすべて「没入の実験体」として数える
+def('lb_subject', {
+  name: '没入の実験体', faction: 'lab', type: 'unit', cost: 1, atk: 2, hp: 1, move: 3, keywords: ['haste'], model: 'subject', subject: true,
+  text: '',
+});
+def('lb_subject_a', {
+  name: '没入の実験体', faction: 'lab', type: 'unit', cost: 0, atk: 2, hp: 2, move: 3, keywords: ['haste'], model: 'subject', subject: true, token: true,
+  text: '「人らしい愛」で生まれた個体。',
+});
+def('lb_subject_b', {
+  name: '没入の実験体', faction: 'lab', type: 'unit', cost: 3, atk: 3, hp: 3, move: 3, keywords: ['haste'], model: 'subject', subject: true, token: true,
+  text: '「人らしい愛」で生まれた個体。',
+});
+def('s_lb_love', {
+  name: '人らしい愛', faction: 'lab', type: 'spell', cost: 2, target: null, icon: '💗', fx: 'draw',
+  text: '「0/2/2/3/1」になった「没入の実験体」と「3/3/3/3/1」になった「没入の実験体」を1枚ずつ手札に加える。',
+  effect(G, c) { G.addCard(c.player, 'lb_subject_a'); G.addCard(c.player, 'lb_subject_b'); },
+});
+def('lb_devotee', {
+  name: '心酔の研究者', faction: 'lab', type: 'unit', cost: 4, atk: 2, hp: 2, move: 2, range: 3, model: 'researcher',
+  text: '召喚時: ランダムなマスに「没入の実験体」を1体出す。',
+  onSummon(G, c) { G.spawn(c.player, 'lb_subject'); },
+});
+def('lb_germ', {
+  name: '細菌の才援', faction: 'lab', type: 'unit', cost: 5, atk: 4, hp: 4, move: 4, keywords: ['guard', 'pierce'], model: 'germ',
+  text: '召喚時: カードを2枚引く。ランダムなマスに「没入の実験体」を1体出す。',
+  onSummon(G, c) { G.draw(c.player, 2); G.spawn(c.player, 'lb_subject'); },
+});
+def('s_lb_crow', {
+  name: '烏ノ涅', faction: 'lab', type: 'spell', cost: 5, target: null, icon: '🪶', fx: 'crow',
+  text: '相手のユニットからランダムに2体を選び、3ダメージ。ランダムなマスに「没入の実験体」を1体出す。',
+  effect(G, c) {
+    const pool = G.enemyUnits(c.player);
+    for (let i = 0; i < 2 && pool.length; i++) {
+      const u = pool.splice(Math.floor(G.rand() * pool.length), 1)[0];
+      G.fx('bolt', G.leaderOf(c.player), u, {});
+      G.damage(u, 3, 'spell');
+    }
+    G.spawn(c.player, 'lb_subject');
+  },
+});
+def('lb_feelin', {
+  name: '破式の変貌・フィーリン', faction: 'lab', type: 'unit', cost: 5, atk: 2, hp: 3, move: 3, range: 3, model: 'feelin', legend: true, env: 'lab',
+  text: '環境「研究室」: 場にいる間、「没入の実験体」すべて+2/+2。',
+});
+def('lb_sephy', {
+  name: '万術の黒研究・セフィー', faction: 'lab', type: 'unit', cost: 7, atk: 7, hp: 5, move: 2, keywords: ['haste'], model: 'sephy', legend: true,
+  text: '自分のターン終了時: 場にいる「没入の実験体」の数だけ、相手のランダムなユニット (将を含む) に1ダメージを与える。',
+  onTurnEnd(G, c) {
+    const n = G.subjects().length;
+    for (let i = 0; i < n; i++) {
+      const foes = G.enemyAll(c.player);
+      if (!foes.length) break;
+      const t = G.pickRandom(foes);
+      G.fx('bolt', c.self, t, {});
+      G.damage(t, 1, 'spell');
+    }
+  },
+});
+// 追加カード
+def('s_lb_chain', {
+  name: '連鎖放電', faction: 'lab', type: 'spell', cost: 2, target: 'enemyUnit', icon: '⚡', fx: 'spark',
+  text: '敵ユニット1体に2ダメージ。そのユニットに隣接する敵ユニットにも1ダメージ。',
+  effect(G, c) {
+    const near = G.enemyUnits(c.player).filter((u) => u !== c.target && Math.abs(u.x - c.x) + Math.abs(u.y - c.y) === 1);
+    G.damage(c.target, 2, 'spell');
+    for (const u of near) { G.fx('bolt', c.target, u, {}); G.damage(u, 1, 'spell'); }
+  },
+});
+def('s_lb_recruit', {
+  name: '被験者募集', faction: 'lab', type: 'spell', cost: 3, target: null, icon: '📋', fx: 'mana',
+  text: 'ランダムなマスに「没入の実験体」を2体出す。',
+  effect(G, c) { G.spawn(c.player, 'lb_subject'); G.spawn(c.player, 'lb_subject'); },
+});
+def('lb_assistant', {
+  name: '助手ロボ', faction: 'lab', type: 'unit', cost: 1, atk: 1, hp: 2, move: 2, model: 'cog',
+  text: '召喚時: 手札に「没入の実験体」を1枚加える。',
+  onSummon(G, c) { G.addCard(c.player, 'lb_subject'); },
+});
+def('lb_tesla', {
+  name: 'テスラ塔', faction: 'lab', type: 'unit', cost: 3, atk: 2, hp: 4, move: 0, range: 2, model: 'tesla',
+  text: '動けない。自分のターン終了時: 2マス以内の敵ユニットすべてに1ダメージ。',
+  onTurnEnd(G, c) {
+    for (const u of G.enemiesWithin(c.player, c.self.x, c.self.y, 2)) {
+      if (u.leader) continue;
+      G.fx('bolt', c.self, u, {});
+      G.damage(u, 1, 'spell');
+    }
+  },
+});
+def('lb_beast', { name: '雷獣', faction: 'lab', type: 'unit', cost: 3, atk: 4, hp: 2, move: 4, keywords: ['haste'], model: 'thunderbeast', text: '' });
+def('lb_warden', {
+  name: '実験体の監視員', faction: 'lab', type: 'unit', cost: 2, atk: 2, hp: 3, move: 2, model: 'warden',
+  text: '召喚時: 味方の「没入の実験体」すべてを+1/+1。',
+  onSummon(G, c) { for (const u of G.friendlyUnits(c.player)) if (C[u.cardId].subject) G.buff(u, 1, 1); },
+});
+def('lb_armor', { name: '電磁装甲兵', faction: 'lab', type: 'unit', cost: 4, atk: 3, hp: 5, move: 2, armor: 1, model: 'mech', text: '' });
+def('lb_orb', {
+  name: '雷雲の観測球', faction: 'lab', type: 'unit', cost: 2, atk: 1, hp: 2, move: 3, range: 2, keywords: ['flying'], model: 'drone',
+  text: '召喚時: カードを1枚引く。',
+  onSummon(G, c) { G.draw(c.player, 1); },
+});
+def('f_lb_rod', {
+  name: '避雷針', faction: 'lab', type: 'field', cost: 2, target: 'tile', icon: '🗼', fx: 'raise',
+  text: 'マス1つの高さ+1。そこに敵ユニットがいれば2ダメージ。',
+  effect(G, c) {
+    G.changeHeight(c.x, c.y, 1);
+    const u = G.unitAt(c.x, c.y);
+    if (u && u.owner !== c.player) { G.fx('bolt', { x: c.x, y: c.y }, u, {}); G.damage(u, 2, 'spell'); }
+  },
+});
+def('f_lb_levitate', {
+  name: '電磁浮上', faction: 'lab', type: 'field', cost: 3, target: 'block', icon: '🧲', fx: 'quake',
+  text: '3x3の区画のマスすべての高さ+1 (最大3)。',
+  effect(G, c) { for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) G.changeHeight(c.x + dx, c.y + dy, 1); },
+});
+def('lb_proto', {
+  name: '試作体ゼロ', faction: 'lab', type: 'unit', cost: 6, atk: 5, hp: 5, move: 3, model: 'proto', legend: true,
+  text: '遺言: ランダムなマスに「没入の実験体」を2体出す。',
+  onDeath(G, c) { G.spawn(c.player, 'lb_subject'); G.spawn(c.player, 'lb_subject'); },
+});
+def('lb_volt', {
+  name: '雷鳴の博士ヴォルト', faction: 'lab', type: 'unit', cost: 7, atk: 4, hp: 7, move: 2, range: 2, model: 'volt', legend: true,
+  text: '奥義「臨界放電」: 盤面のすべてのマスを平原・高さ1に変え、敵ユニットすべてに2ダメージ。',
+  skill: {
+    name: '臨界放電', fx: 'discharge',
+    effect(G, c) {
+      G.fieldWide('discharge', c.self, () => {
+        G.s.tiles.forEach((t, i) => {
+          const x = i % 7, y = (i / 7) | 0;
+          G.setTerrain(x, y, 'plain');
+          G.changeHeight(x, y, 1 - t.height);
+        });
+      });
+      for (const u of G.enemyUnits(c.player)) G.damage(u, 2, 'spell');
+    },
+  },
+});
+def('s_lb_thunder', {
+  name: '落雷の儀', faction: 'lab', type: 'spell', cost: 5, target: null, icon: '🌩', fx: 'crow', legend: true,
+  text: '相手のランダムなユニット (将を含む) に1ダメージを、3 + 自分の場の「没入の実験体」の数だけ行う。',
+  effect(G, c) {
+    const n = 3 + G.friendlyUnits(c.player).filter((u) => C[u.cardId].subject).length;
+    for (let i = 0; i < n; i++) {
+      const foes = G.enemyAll(c.player);
+      if (!foes.length) break;
+      const t = G.pickRandom(foes);
+      G.fx('bolt', G.leaderOf(c.player), t, {});
+      G.damage(t, 1, 'spell');
+    }
+  },
+});
+
 export const CARDS = C;
 
 // ---------------- デッキ構築ルール ----------------
@@ -597,10 +768,22 @@ export const PRESETS = {
   ],
 };
 
+PRESETS.lab = [
+  { id: 'lab_std', name: '没入計画', desc: '「没入の実験体」を次々と送り出し、フィーリンとセフィーで仕上げる。', cards: build([
+    'lb_subject', 'lb_assistant', 's_lb_love', 'lb_warden', 'lb_devotee', 'lb_germ', 's_lb_recruit', ['s_lb_crow', 1],
+    ['lb_feelin', 1], ['lb_sephy', 1], 'lb_beast', 's_lb_chain', 'n_archer', 'f_lb_rod', 'lb_orb', ['s_lb_thunder', 1], 'n_shield',
+  ]) },
+  { id: 'lab_volt', name: '雷鳴研究所', desc: 'テスラ塔と装甲兵で守り、ヴォルトの臨界放電で盤面ごと焼き払う。', cards: build([
+    'lb_tesla', 'lb_armor', 'lb_orb', 'lb_beast', 's_lb_chain', 'f_lb_rod', 'f_lb_levitate', ['lb_volt', 1], ['lb_proto', 1],
+    'lb_subject', 'lb_devotee', 'lb_germ', 'n_giant', 'n_mage', 's_lb_crow', 'n_spear',
+  ]) },
+];
+
 export const DECKS = {
   fire: PRESETS.fire[0].cards,
   forest: PRESETS.forest[0].cards,
   azure: PRESETS.azure[0].cards,
+  lab: PRESETS.lab[0].cards,
 };
 
 export function keywordList(card) {

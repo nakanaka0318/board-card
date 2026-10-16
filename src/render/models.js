@@ -1095,6 +1095,194 @@ Object.assign(BUILDERS, {
   },
 });
 
+// ---------------- 雷研究室 ----------------
+// 電極から散る火花 (ちらつき)
+function sparkBits(parent, n, color, rad, y) {
+  const bits = [];
+  for (let i = 0; i < n; i++) bits.push(part(G.box(0.008, 0.05, 0.008), glow(color, 3), 0, y, 0, parent));
+  return (t) => bits.forEach((b, i) => {
+    const on = Math.sin(t * 23 + i * 7.1) > 0.3;
+    b.visible = on;
+    if (on) {
+      const a = i * 2.4 + Math.floor(t * 12) * 0.9;
+      b.position.set(Math.cos(a) * rad, y + Math.sin(a * 1.7) * 0.08, Math.sin(a) * rad);
+      b.rotation.set(a, a * 0.7, a * 1.3);
+    }
+  });
+}
+
+Object.assign(BUILDERS, {
+  // 没入の実験体: 患者衣と包帯、頭の電極、青く光る血管
+  subject(card, P) {
+    const r = humanoid({ body: '#b8bcc8', armor: '#d8dce4', skin: '#d8c4b4', legs: '#9aa0ac', scale: 0.88 });
+    part(G.torus(0.078, 0.014, 4, 14), mat('#f2f2f2'), 0, 0.05, 0, r.head).rotation.x = Math.PI / 2;
+    for (const sgn of [-1, 1]) {
+      part(G.cyl(0.008, 0.008, 0.06, 4), metal('#9aa0ac'), sgn * 0.05, 0.1, 0, r.head).rotation.z = -sgn * 0.5;
+      part(G.sph(0.012, 6, 4), glow('#7ff4ff', 3), sgn * 0.07, 0.13, 0, r.head);
+    }
+    for (let i = 0; i < 4; i++) part(G.box(0.012, 0.06, 0.004), glow('#5fe8ff', 2), -0.06 + i * 0.04, 0.33, 0.062, r.g);
+    const sp = sparkBits(r.head, 3, '#bff8ff', 0.09, 0.12);
+    r.root.userData.anim = (t) => {
+      humanoidIdle(r, 1.3)(t);
+      // ときどき痙攣する
+      const tw = Math.sin(t * 13) > 0.92 ? (Math.random() - 0.5) * 0.25 : 0;
+      r.head.rotation.z = tw;
+      r.armL.rotation.z = tw * 0.8;
+      sp(t);
+    };
+    return r.root;
+  },
+  // 心酔の研究者: 白衣とゴーグル、光る薬瓶
+  researcher(card, P) {
+    const r = humanoid({ body: '#e8eaf0', armor: '#f4f6fa', skin: P.skin, legs: '#2a2a3a', robe: true });
+    part(G.box(0.12, 0.03, 0.03), mat('#2a2a3a'), 0, 0.04, 0.065, r.head);
+    for (const sgn of [-1, 1]) part(G.cyl(0.022, 0.022, 0.02, 10), glow('#7fffb0', 1.8), sgn * 0.032, 0.04, 0.08, r.head).rotation.x = Math.PI / 2;
+    part(G.sph(0.078, 10, 6), mat('#4a3a5a'), 0, 0.05, -0.015, r.head).scale.set(1, 0.7, 1);
+    const vial = new THREE.Group();
+    part(G.cyl(0.02, 0.025, 0.08, 8), mat('#cfefff', { transparent: true, opacity: 0.5 }), 0, 0.03, 0, vial);
+    const liquid = part(G.cyl(0.018, 0.022, 0.05, 8), glow('#9aff5a', 2.2), 0, 0.015, 0, vial);
+    r.handR.add(vial);
+    r.armR.rotation.x = -0.9;
+    r.root.userData.anim = (t) => { humanoidIdle(r, 0.5)(t); r.armR.rotation.x = -0.9 + Math.sin(t * 2) * 0.1; liquid.scale.y = 0.8 + Math.sin(t * 4) * 0.2; };
+    return r.root;
+  },
+  // 細菌の才援: 棘を持つ半透明の巨大な細胞と、まわりを巡る胞子
+  germ(card, P) {
+    const g = new THREE.Group();
+    const core = new THREE.Group();
+    g.add(core);
+    const membrane = part(G.ico(0.22, 2), mat('#8adf6a', { transparent: true, opacity: 0.7, emissive: '#2a6a1a', emissiveIntensity: 0.5, roughness: 0.2 }), 0, 0.3, 0, core);
+    const nucleus = part(G.ico(0.09, 1), glow('#d86aff', 1.8), 0.03, 0.32, 0.02, core);
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2, b = (i % 3) * 0.6 - 0.6;
+      const sp = part(G.cone(0.025, 0.12, 5), mat('#5aaa3a'), 0, 0, 0, core);
+      const d = new THREE.Vector3(Math.cos(a) * Math.cos(b), Math.sin(b), Math.sin(a) * Math.cos(b));
+      sp.position.copy(d.clone().multiplyScalar(0.24)).add(new THREE.Vector3(0, 0.3, 0));
+      sp.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d);
+    }
+    for (const sgn of [-1, 1]) part(G.sph(0.022, 6, 4), glow('#fff27a', 3), sgn * 0.07, 0.36, 0.2, core);
+    const spores = [];
+    for (let i = 0; i < 5; i++) spores.push(part(G.sph(0.025, 6, 4), glow('#b8ff7a', 1.6), 0, 0, 0, g));
+    g.userData.anim = (t) => {
+      const pulse = 1 + Math.sin(t * 2.4) * 0.05;
+      membrane.scale.set(pulse, 1 / pulse, pulse);
+      nucleus.position.x = 0.03 + Math.sin(t * 1.3) * 0.03;
+      core.rotation.y = t * 0.3;
+      spores.forEach((s, i) => {
+        const a = t * 0.9 + (i * Math.PI * 2) / 5;
+        s.position.set(Math.cos(a) * 0.36, 0.25 + Math.sin(t * 2 + i) * 0.1, Math.sin(a) * 0.36);
+      });
+    };
+    return g;
+  },
+  // 実験体の監視員: 防護服とバイザー、警棒
+  warden(card, P) {
+    const r = humanoid({ body: '#3a3f5a', armor: '#c8b04a', skin: P.skin, head: 'visor', headColor: '#4a4f6a' });
+    const baton = new THREE.Group();
+    part(G.cyl(0.012, 0.012, 0.2, 6), mat('#1a1a22'), 0, 0.08, 0, baton);
+    const tip = part(G.sph(0.02, 6, 4), glow('#ffe14a', 2.6), 0, 0.19, 0, baton);
+    r.handR.add(baton);
+    baton.rotation.x = Math.PI / 2.4;
+    r.root.userData.anim = (t) => { humanoidIdle(r, 0.2)(t); tip.visible = Math.sin(t * 9) > -0.2; };
+    return r.root;
+  },
+  // テスラ塔: 巻かれたコイルと放電する球
+  tesla(card, P) {
+    const g = new THREE.Group();
+    part(G.cyl(0.16, 0.2, 0.08, 10), metal('#4a4f6a'), 0, 0.04, 0, g);
+    part(G.cyl(0.05, 0.07, 0.5, 8), metal('#8a8fa8'), 0, 0.33, 0, g);
+    for (let i = 0; i < 5; i++) part(G.torus(0.09 - i * 0.008, 0.014, 4, 18), metal('#c98a3a'), 0, 0.16 + i * 0.07, 0, g).rotation.x = Math.PI / 2;
+    const orb = part(G.sph(0.08, 12, 10), glow('#bfe8ff', 2.2), 0, 0.64, 0, g);
+    part(G.torus(0.13, 0.012, 4, 24), metal('#c8ccd8'), 0, 0.64, 0, g).rotation.x = Math.PI / 2;
+    const sp = sparkBits(g, 6, '#d8f4ff', 0.16, 0.64);
+    g.userData.anim = (t) => { orb.scale.setScalar(1 + Math.sin(t * 9) * 0.08); sp(t); };
+    return g;
+  },
+  // 雷獣: 黄色い毛並みと背中の稲妻
+  thunderbeast(card, P) {
+    const w = quadruped({ body: '#e8c43a', belly: '#fff2a0', legLen: 0.15, long: 1.1, scale: 1.1 });
+    for (let i = 0; i < 4; i++) {
+      const z = part(G.box(0.02, 0.09, 0.02), glow('#7ff4ff', 2.5), 0, 0.33, 0.1 - i * 0.07, w.g);
+      z.rotation.z = (i % 2 ? 0.6 : -0.6);
+    }
+    for (const sgn of [-1, 1]) {
+      part(G.sph(0.016, 6, 4), glow('#7ff4ff', 3), sgn * 0.035, 0.02, 0.06, w.headP);
+      const e = part(G.cone(0.02, 0.06, 4), mat('#e8c43a'), sgn * 0.04, 0.06, -0.02, w.headP);
+      e.rotation.z = -sgn * 0.3;
+    }
+    const tail = part(G.box(0.02, 0.12, 0.02), glow('#ffe14a', 1.6), 0, 0.05, -0.03, w.tail);
+    tail.rotation.x = -0.8;
+    const sp = sparkBits(w.g, 4, '#bff8ff', 0.15, 0.3);
+    w.root.userData.anim = (t) => { quadIdle(w, 3)(t); sp(t); };
+    return w.root;
+  },
+  // 試作体ゼロ: 肉体と装甲を継ぎはぎした巨体、背中の発光管
+  proto(card, P) {
+    const r = humanoid({ body: '#7a6a6a', armor: '#5a5f7a', skin: '#b8a0a0', legs: '#3a3a4a', bulky: 1.45, scale: 1.25, head: 'greathelm', headColor: '#5a5f7a' });
+    for (let i = 0; i < 3; i++) part(G.cyl(0.018, 0.018, 0.16, 6), glow('#9aff5a', 2.2), -0.05 + i * 0.05, 0.36, -0.1, r.g);
+    part(G.box(0.2, 0.03, 0.02), glow('#ff4a6a', 2), 0, 0.3, 0.09, r.g);
+    const sp = sparkBits(r.g, 4, '#c8ffb0', 0.16, 0.42);
+    r.root.userData.anim = (t) => { humanoidIdle(r, 0.1)(t * 0.7); r.g.position.y = Math.abs(Math.sin(t * 1.2)) * 0.01; sp(t); };
+    return r.root;
+  },
+  // 破式の変貌・フィーリン: 割れた仮面と紫電をまとう変貌者
+  feelin(card, P) {
+    const r = humanoid({ body: '#2a1a3a', armor: '#5a3a8a', skin: '#e0ccd8', robe: true, head: 'hood', headColor: '#3a2050' });
+    const mask = part(G.box(0.07, 0.08, 0.01), mat('#f4f0f8'), 0.015, 0.03, 0.08, r.head);
+    mask.rotation.z = 0.15;
+    part(G.box(0.012, 0.012, 0.012), glow('#ff4af0', 3), 0.03, 0.04, 0.088, r.head);
+    const ring = pivot(r.g, 0, 0.32, 0);
+    part(G.torus(0.22, 0.008, 4, 32), glow('#c86aff', 2.4), 0, 0, 0, ring).rotation.x = Math.PI / 2;
+    part(G.torus(0.17, 0.006, 4, 28), glow('#7fffe8', 2.4), 0, 0.12, 0, ring).rotation.x = Math.PI / 2.4;
+    const sp = sparkBits(r.g, 6, '#e8b8ff', 0.2, 0.3);
+    r.root.userData.anim = (t) => { humanoidIdle(r, 0.6)(t); ring.rotation.y = t * 1.4; ring.rotation.z = Math.sin(t) * 0.2; sp(t); };
+    return r.root;
+  },
+  // 万術の黒研究・セフィー: 黒い外套と大鎌、まわりを巡る薬瓶
+  sephy(card, P) {
+    const r = humanoid({ body: '#141018', armor: '#2a2030', skin: '#e8dcd8', robe: true, head: 'hood', headColor: '#0e0a12' });
+    part(G.box(0.08, 0.015, 0.01), glow('#ff3a6a', 2.4), 0, 0.03, 0.078, r.head);
+    const scythe = new THREE.Group();
+    part(G.cyl(0.01, 0.012, 0.56, 6), mat('#2a2030'), 0, 0.12, 0, scythe);
+    const blade = part(G.torus(0.13, 0.014, 4, 16, Math.PI * 0.7), metal('#d8d0e0'), 0.06, 0.38, 0, scythe);
+    blade.rotation.z = 1.2;
+    part(G.sph(0.02, 6, 4), glow('#b48aff', 3), 0, 0.4, 0, scythe);
+    r.handR.add(scythe);
+    r.armR.rotation.x = -0.4;
+    const vials = ['#9aff5a', '#ff5a8a', '#7fe8ff'].map((c) => part(G.cyl(0.018, 0.018, 0.06, 6), glow(c, 2), 0, 0, 0, r.root));
+    r.root.userData.anim = (t) => {
+      humanoidIdle(r, 0.9)(t);
+      r.armR.rotation.x = -0.4;
+      vials.forEach((v, i) => {
+        const a = t * 1.2 + (i * Math.PI * 2) / 3;
+        v.position.set(Math.cos(a) * 0.24, 0.42 + Math.sin(t * 2 + i) * 0.05, Math.sin(a) * 0.24);
+        v.rotation.z = a;
+      });
+    };
+    return r.root;
+  },
+  // 雷鳴の博士ヴォルト: 逆立つ白髪とゴーグル、背負ったテスラコイル
+  volt(card, P) {
+    const r = humanoid({ body: '#e8eaf0', armor: '#f4f6fa', skin: P.skin, legs: '#2a2a3a', robe: true });
+    for (let i = 0; i < 7; i++) {
+      const a = -1.2 + i * 0.4;
+      const h = part(G.cone(0.02, 0.08, 4), mat('#f4f4f4'), Math.sin(a) * 0.06, 0.09, -Math.cos(a) * 0.03 - 0.01, r.head);
+      h.rotation.z = -Math.sin(a) * 0.9;
+    }
+    part(G.box(0.13, 0.03, 0.03), mat('#3a2a1a'), 0, 0.05, 0.065, r.head);
+    for (const sgn of [-1, 1]) part(G.cyl(0.024, 0.024, 0.02, 10), glow('#ffe14a', 2.2), sgn * 0.034, 0.05, 0.08, r.head).rotation.x = Math.PI / 2;
+    const pack = pivot(r.g, 0, 0.36, -0.12);
+    part(G.box(0.16, 0.18, 0.08), metal('#5a5f7a'), 0, 0, 0, pack);
+    for (const sgn of [-1, 1]) {
+      part(G.cyl(0.02, 0.02, 0.22, 6), metal('#c98a3a'), sgn * 0.05, 0.17, 0, pack);
+      part(G.sph(0.03, 8, 6), glow('#c9a6ff', 2.6), sgn * 0.05, 0.29, 0, pack);
+    }
+    const sp = sparkBits(pack, 6, '#e8d8ff', 0.08, 0.3);
+    r.root.userData.anim = (t) => { humanoidIdle(r, 0.4)(t); sp(t); };
+    return r.root;
+  },
+});
+
 /** カード ID と陣営の色からユニット模型を生成する */
 export function buildUnitModel(cardId) {
   const card = CARDS[cardId];
@@ -1126,4 +1314,5 @@ export const MODEL_HEIGHT = {
   imp: 0.75, golem: 0.8, mech: 0.85, cavalry: 0.85, wolf: 0.55, lizard: 0.5, gnome: 0.6, cog: 0.6,
   phoenix: 0.75, bear: 0.8, wisp: 0.65, sapling: 0.4, wall: 0.5, drone: 0.6, bomber: 0.6, titan: 1.1, elder: 1.15,
   inferno: 1.05, sunpriest: 0.8, worldtree: 1.3, rainlord: 1.05, astra: 1.1, stargazer: 0.8,
+  subject: 0.65, researcher: 0.75, germ: 0.75, warden: 0.75, tesla: 0.85, thunderbeast: 0.6, proto: 0.95, feelin: 0.8, sephy: 0.8, volt: 0.85,
 };

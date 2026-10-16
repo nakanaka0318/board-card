@@ -340,3 +340,70 @@ test('環境: 恵みの霧雨でターン開始時に手番側のユニットが
   assert.equal(leaderOf(s, 0).hp, 10, '将は回復しない');
   assert.ok(rl.hp > 0);
 });
+
+test('雷研究室: 研究者が実験体を出し、研究室で+2/+2、フィーリンが倒れると戻る', () => {
+  const s = createGame({ factions: ['lab', 'fire'], seed: 5, first: 0 });
+  s.tiles.forEach((t) => { t.terrain = 'plain'; t.height = 0; });
+  s.events = [];
+  summon(s, 0, 'lb_devotee', 2, 1);
+  const subj = s.units.find((u) => u.cardId === 'lb_subject');
+  assert.ok(subj, '実験体が出る');
+  assert.equal(subj.sick, false, '突撃');
+  const fe = summon(s, 0, 'lb_feelin', 4, 1);
+  assert.equal(s.envKind, 'lab');
+  assert.equal(subj.atk, 4);
+  assert.equal(subj.hp, 3);
+  // 研究室の間に出た実験体にも効く
+  summon(s, 0, 'lb_devotee', 5, 1);
+  const subs = s.units.filter((u) => u.cardId === 'lb_subject');
+  assert.equal(subs.length, 2);
+  assert.ok(subs.every((u) => u.atk === 4 && u.maxHp === 3));
+  // フィーリンが倒れると元に戻る
+  s.current = 1;
+  fe.hp = 1;
+  const e = addUnit(s, 1, 'fi_blade', 4, 2);
+  assert.ok(applyAction(s, { type: 'attack', uid: e.uid, target: fe.uid }));
+  assert.equal(s.envKind, null);
+  assert.ok(subs.every((u) => u.atk === 2 && u.maxHp === 1 && u.hp === 1));
+});
+
+test('人らしい愛: 2種類の実験体を手札に加える / 監視員で+1/+1', () => {
+  const s = blank({ factions: ['lab', 'fire'] });
+  const before = s.players[0].hand.length;
+  summonSpell(s, 0, 's_lb_love');
+  const added = s.players[0].hand.slice(before).map((h) => h.cardId);
+  assert.deepEqual(added, ['lb_subject_a', 'lb_subject_b']);
+  assert.equal(CARDS.lb_subject_a.cost, 0);
+  assert.equal(CARDS.lb_subject_b.atk, 3);
+  const a = summon(s, 0, 'lb_subject_a', 1, 1);
+  summon(s, 0, 'lb_warden', 2, 1);
+  assert.equal(a.atk, 3);
+  assert.equal(a.hp, 3);
+});
+
+test('セフィー: 自分のターン終了時、実験体の数だけ敵にランダム1ダメージ', () => {
+  const s = blank({ factions: ['lab', 'fire'] });
+  summon(s, 0, 'lb_sephy', 3, 1);
+  summon(s, 0, 'lb_subject', 1, 1);
+  summon(s, 0, 'lb_subject', 5, 1);
+  const L = leaderOf(s, 1);
+  const hp0 = L.hp;
+  applyAction(s, { type: 'end' });
+  assert.equal(L.hp, hp0 - 2, '敵が将だけなら将に2ダメージ');
+});
+
+test('烏ノ涅: 敵ユニット2体に3ダメージ、実験体を出す', () => {
+  const s = blank({ factions: ['lab', 'fire'] });
+  const a = addUnit(s, 1, 'n_giant', 1, 5), b = addUnit(s, 1, 'n_giant', 5, 5);
+  summonSpell(s, 0, 's_lb_crow');
+  assert.equal(a.hp, CARDS.n_giant.hp - 3);
+  assert.equal(b.hp, CARDS.n_giant.hp - 3);
+  assert.ok(s.units.some((u) => u.cardId === 'lb_subject' && u.owner === 0));
+});
+
+function summonSpell(s, p, cardId) {
+  s.players[p].hand.push({ uid: s.nextUid++, cardId });
+  s.players[p].mana = 10;
+  const h = s.players[p].hand[s.players[p].hand.length - 1];
+  assert.ok(applyAction(s, { type: 'play', handUid: h.uid }), 'play ' + cardId);
+}
