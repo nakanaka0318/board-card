@@ -1,7 +1,7 @@
 // 対局の進行役: ルールエンジン・3D ビュー・HUD・AI をつなぐ。
 import { CARDS, FACTIONS } from './engine/cards.js';
 import {
-  W, idx, dist, createGame, applyAction, reachable, pathTo, targetsFrom, canMove, canAttack, canPlay, cpOf, COMMAND_POINTS,
+  W, H, idx, dist, createGame, applyAction, reachable, pathTo, targetsFrom, canMove, canAttack, canPlay, cpOf, moveCp, COMMAND_POINTS,
   canHero, cardTargets, targetsFor, unitAt, unitById, forecast, hasAnyAction, effRangeAt, tileAt, coordName,
 } from './engine/rules.js';
 import { DIFFICULTY, planTurn, describePlan, intentOf, evaluate, winProb, threatMap } from './engine/ai.js';
@@ -241,6 +241,7 @@ export class Game {
       heroArmed: this.sel.mode === 'hero',
       aiThinking: this.thinking,
       noMoves: humanTurn && !hasAnyAction(s, this.human),
+      readyCount: humanTurn ? this.readyUnits().length : 0,
     });
     const p0 = winProb(evaluate(s, 0, null, s.current));
     this.hud.setBalance(p0, this.opts.watch ? ['青軍', '赤軍'] : ['あなた', 'AI']);
@@ -434,9 +435,19 @@ export class Game {
     const sel = this.sel;
     const list = [];
     if (sel.mode === 'idle') {
-      if (this.showThreat && this.human !== null) {
-        const tm = threatMap(s, 1 - this.human);
-        for (let i = 0; i < tm.length; i++) if (tm[i] > 0) list.push({ x: i % W, y: (i / W) | 0, kind: 'danger' });
+      const er = this.rangeOf && unitById(s, this.rangeOf);
+      if (er) {
+        // 敵ユニットの移動範囲 (橙) と攻撃が届く範囲 (赤)
+        const r = unitRange(s, er);
+        for (const i of r.attack) if (!r.move.has(i)) list.push({ x: i % W, y: (i / W) | 0, kind: 'erange' });
+        for (const i of r.move) list.push({ x: i % W, y: (i / W) | 0, kind: 'emove' });
+        list.push({ x: er.x, y: er.y, kind: 'select' });
+      } else {
+        this.rangeOf = null;
+        if (this.showThreat && this.human !== null) {
+          const tm = threatMap(s, 1 - this.human);
+          for (let i = 0; i < tm.length; i++) if (tm[i] > 0) list.push({ x: i % W, y: (i / W) | 0, kind: 'danger' });
+        }
       }
     } else if (sel.mode === 'unit') {
       const u = unitById(s, sel.uid);
@@ -451,7 +462,28 @@ export class Game {
       if (sel.preview) for (const t of sel.preview) list.push({ x: t.x, y: t.y, kind: 'select' });
     }
     this.view.setHighlights(list);
+    // まだ行動できる自軍ユニットの足元を光らせる (何も選んでいない時だけ)
+    this.view.setReady(sel.mode === 'idle' && this.humanTurn ? this.readyUnits().map((u) => u.uid) : []);
     this.updateActionBar();
+  }
+
+  // このターンにまだ何かできる自軍ユニット
+  readyUnits() {
+    const s = this.state;
+    if (this.human === null) return [];
+    // 将は移動が自由なので、攻撃できる時だけ数える
+    return s.units.filter((u) => u.owner === this.human && u.hp > 0
+      && ((!u.leader && canMove(s, u)) || (canAttack(s, u) && targetsFrom(s, u, u.x, u.y).length)));
+  }
+
+  // 敵ユニットの範囲表示を切り替える
+  toggleRange(u) {
+    this.rangeOf = this.rangeOf === u.uid ? null : u.uid;
+    if (this.rangeOf) {
+      this.sfx('select');
+      if (!this.rangeHintShown) { this.rangeHintShown = true; this.hud.toast('<b style="color:#ffb347">橙</b>: 次のターンに移動できる範囲 / <b style="color:#ff6a7a">赤</b>: 攻撃が届く範囲。もう一度タップで解除'); }
+    }
+    this.updateHighlights();
   }
 
   selectUnit(u) {
@@ -460,7 +492,7 @@ export class Game {
     if (canMove(s, u)) sel.reach = reachable(s, u);
     if (canAttack(s, u)) {
       sel.direct = targetsFrom(s, u, u.x, u.y);
-      if (sel.reach && cpOf(s, u.owner) >= 2) {
+      if (sel.reach && cpOf(s, u.owner) >= moveCp(u) + 1) {
         for (const i of sel.reach.tiles) {
           const x = i % W, y = (i / W) | 0;
           for (const t of targetsFrom(s, u, x, y)) {
@@ -545,6 +577,13 @@ export class Game {
         else this.hud.inspectTile(this.state, hit.x, hit.y, { pinned: true });
       } else this.hud.hideInspector(true);
     }
+    // 敵ユニットをタップ/クリックすると攻撃範囲を表示 (攻撃対象として選んだ場合を除く)
+    if (sel.mode === 'idle' || !this.humanTurn) {
+      const t = hit && unitAt(this.state, hit.x, hit.y);
+      const enemy = t && (this.human === null ? true : t.owner !== this.human);
+      if (enemy) return this.toggleRange(t);
+      if (this.rangeOf) { this.rangeOf = null; this.updateHighlights(); }
+    }
     if (!this.humanTurn) return;
     const s = this.state;
     if (sel.mode !== 'idle') hit = this.snap(hit, e);
@@ -576,6 +615,7 @@ export class Game {
         return;
       }
       if (u && u.uid === sel.uid) { this.sfx('cancel'); return this.clearSelection(); }
+      if (u && u.owner !== this.human) { this.clearSelection(); return this.toggleRange(u); }
     }
     if (u && u.owner === this.human) return this.trySelectUnit(u);
     if (sel.mode !== 'idle') { this.sfx('cancel'); this.clearSelection(); }
@@ -664,7 +704,9 @@ export class Game {
       if (sel.reach && sel.reach.tiles.length) parts.push('<span class="ab-move">青</span>のマスへ移動');
       if (sel.direct.length || sel.viaMove.size) parts.push(sel.viaMove.size ? '<span class="ab-atk">赤</span>の敵を攻撃 (移動も自動)' : '<span class="ab-atk">赤</span>の敵を攻撃');
       const cp = cpOf(s, u.owner);
-      parts.push(`<span class="ab-cp">指揮 ${cp}/${COMMAND_POINTS}</span> (移動・攻撃 −1、移動して攻撃 −2)`);
+      parts.push(u.leader
+        ? `<span class="ab-cp">指揮 ${cp}/${COMMAND_POINTS}</span> (将の移動は消費なし・攻撃 −1)`
+        : `<span class="ab-cp">指揮 ${cp}/${COMMAND_POINTS}</span> (移動・攻撃 −1、移動して攻撃 −2)`);
       const name = u.leader ? 'あなたの将' : CARDS[u.cardId].name;
       this.hud.setActionBar({
         title: `${name} <small>⚔${u.atk} ❤${u.hp}</small>`,
@@ -861,4 +903,21 @@ export class Game {
     document.getElementById('gameover').classList.remove('hidden');
     this.hud.addLog(w === -1 ? '引き分け' : `${this.names[w]}の勝利!`, 'sys');
   }
+}
+
+// 敵ユニットが次のターンに動ける範囲と、攻撃が届く範囲 (マス番号の集合)
+function unitRange(s, u) {
+  const move = new Set();
+  const attack = new Set();
+  const origins = [idx(u.x, u.y)];
+  if (u.move > 0 && !u.frozen) for (const i of reachable(s, u).tiles) { move.add(i); origins.push(i); }
+  if (u.atk > 0) {
+    for (const o of origins) {
+      const ox = o % W, oy = (o / W) | 0;
+      const r = effRangeAt(s, u, ox, oy);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (dist(ox, oy, x, y) <= r && dist(ox, oy, x, y) > 0) attack.add(idx(x, y));
+    }
+  }
+  attack.delete(idx(u.x, u.y));
+  return { move, attack };
 }

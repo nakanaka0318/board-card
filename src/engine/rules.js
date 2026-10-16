@@ -177,7 +177,9 @@ export function canAct(s, u) {
   return u.owner === s.current && !u.sick && !u.frozen && s.winner === null;
 }
 export const cpOf = (s, p) => s.players[p].cp ?? COMMAND_POINTS;
-export const canMove = (s, u) => canAct(s, u) && !u.moved && !u.attacked && cpOf(s, u.owner) >= 1;
+// 将の移動は指揮力を使わない
+export const moveCp = (u) => (u.leader ? 0 : 1);
+export const canMove = (s, u) => canAct(s, u) && !u.moved && !u.attacked && cpOf(s, u.owner) >= moveCp(u);
 export const canAttack = (s, u) => canAct(s, u) && !u.attacked && effAtk(s, u) > 0 && cpOf(s, u.owner) >= 1;
 
 // ガード (ZOC) マップ: owner にとって「敵の守護ユニットに隣接」するマス
@@ -198,6 +200,7 @@ export function moveCost(s, u, fx, fy, tx, ty) {
   const a = tileAt(s, fx, fy), b = tileAt(s, tx, ty);
   const dh = b.height - a.height;
   if (dh >= 2 || dh <= -2) return Infinity;
+  if (u.leader) return 1; // 将は地形・1段の段差の影響を受けない
   return TERRAIN[b.terrain].cost + (dh === 1 ? 1 : 0);
 }
 
@@ -686,7 +689,7 @@ export function applyAction(s, a) {
       // 移動して攻撃するには指揮力が 2 必要 (その場で攻撃なら 1)。途中で失敗しないよう先に確認する
       const u = unitById(s, a.uid);
       const moving = u && !(u.x === a.x && u.y === a.y);
-      if (!u || cpOf(s, u.owner) < (moving ? 2 : 1)) { ok = false; break; }
+      if (!u || cpOf(s, u.owner) < (moving ? moveCp(u) : 0) + 1) { ok = false; break; }
       ok = doMove(s, a) && doAttack(s, a);
       break;
     }
@@ -764,7 +767,7 @@ function doMove(s, a) {
   u.x = a.x;
   u.y = a.y;
   u.moved = true;
-  spendCp(s, u.owner);
+  if (moveCp(u)) spendCp(s, u.owner);
   return true;
 }
 
@@ -829,7 +832,7 @@ export function hasAnyAction(s, p) {
     if (u.owner !== p || u.hp <= 0) continue;
     if (canAttack(s, u)) {
       if (targetsFrom(s, u, u.x, u.y).length) return true;
-      if (canMove(s, u) && cpOf(s, p) >= 2) {
+      if (canMove(s, u) && cpOf(s, p) >= moveCp(u) + 1) {
         const r = reachable(s, u);
         for (const i of r.tiles) if (targetsFrom(s, u, i % W, (i / W) | 0).length) return true;
       }

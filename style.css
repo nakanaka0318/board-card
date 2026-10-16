@@ -361,6 +361,7 @@ button { font-family: inherit; cursor: pointer; }
 }
 .et-main { font-size: 17px; letter-spacing: 0.1em; }
 .et-sub { font-size: 9px; color: var(--muted); font-family: var(--font); }
+#end-turn .et-sub.cnt { display: block; color: #ffd98a; font-size: 10px; font-weight: 900; letter-spacing: 0.05em; }
 #end-turn:hover:not(:disabled) { transform: scale(1.05); filter: brightness(1.2); }
 #end-turn.ready { animation: et-glow 1.4s infinite; background: linear-gradient(180deg, #8a6a1a, #4a3608); }
 @keyframes et-glow { 50% { box-shadow: 0 0 0 4px rgba(232, 196, 106, 0.3), 0 0 30px var(--gold); } }

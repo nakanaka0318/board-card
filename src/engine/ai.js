@@ -9,7 +9,7 @@ import { CARDS, FACTIONS } from './cards.js';
 import {
   W, H, idx, dist, cloneState, applyAction, reachable, targetsFrom, effAtk, effAtkAt, effRangeAt,
   calcDamage, canMove, canAttack, canPlay, canHero, cardTargets, targetsFor, leaderOf, unitAt, tileAt,
-  ignoresLava, isFlying, forecast, coordName, unitById, inEnemyHome, COMMAND_POINTS, cpOf,
+  ignoresLava, isFlying, forecast, coordName, unitById, inEnemyHome, COMMAND_POINTS, cpOf, moveCp,
 } from './rules.js';
 
 export const DIFFICULTY = {
@@ -73,7 +73,7 @@ export function threatMap(s, owner) {
     }
     for (let i = 0; i < N; i++) {
       if (near[i]) items[i].push(near[i], 1);
-      if (far[i] > near[i]) items[i].push(far[i], 2);
+      if (far[i] > near[i]) items[i].push(far[i], moveCp(u) + 1);
     }
   }
   const map = new Float32Array(N);
@@ -246,7 +246,7 @@ export function generateActions(s, p, cfg, opts = {}) {
     if (!mov) continue;
     const r = reachable(s, u);
     // 移動して攻撃: 対象ごとに最良の立ち位置を 1 つ (指揮力 2 が必要)
-    if (atk && cpOf(s, p) >= 2) {
+    if (atk && cpOf(s, p) >= moveCp(u) + 1) {
       const bestFor = new Map();
       for (const i of r.tiles) {
         const x = i % W, y = (i / W) | 0;

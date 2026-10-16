@@ -27,7 +27,9 @@ export const wz = (y) => ((H - 1) / 2 - y) * S;
 const HL_COLORS = {
   move: '#3ad6ff', attack: '#ff3d4d', summon: '#5dff8a', spell: '#c77dff', hero: '#ffd24a',
   select: '#ffffff', danger: '#ff3d4d', path: '#3ad6ff', field: '#ffa84a', ai: '#ff79c6',
+  ready: '#ffd24a', emove: '#ff7a00', erange: '#ff1030',
 };
+const SOLID_HL = new Set(['ready', 'emove', 'erange']);
 
 export class BoardView {
   constructor(container) {
@@ -564,7 +566,7 @@ export class BoardView {
       const isTurn = u.owner === state.current;
       uv.exhausted = isTurn && (u.sick || u.frozen || (u.attacked && u.moved) || (u.attacked));
       uv.status.visible = !!u.sick && !u.frozen;
-      uv.base.userData.ringMat.emissiveIntensity = uv.exhausted ? 0.25 : 1.4;
+      if (!uv.ready) uv.base.userData.ringMat.emissiveIntensity = uv.exhausted ? 0.25 : 1.4;
       this.placeUnit(uv);
     }
     for (const [uid, uv] of this.units) {
@@ -577,7 +579,11 @@ export class BoardView {
   // ------------------------------------------------------------
 
   clearHighlights() {
-    for (const tv of this.tiles.values()) { tv.hlKind = null; tv.hlMat.opacity = 0; }
+    for (const tv of this.tiles.values()) {
+      tv.hlKind = null;
+      tv.hlMat.opacity = 0;
+      if (tv.hlMat.blending !== THREE.AdditiveBlending) { tv.hlMat.blending = THREE.AdditiveBlending; tv.hlMat.needsUpdate = true; }
+    }
     this.clearPath();
   }
 
@@ -589,6 +595,22 @@ export class BoardView {
       if (!tv) continue;
       tv.hlKind = h.kind;
       tv.hlMat.color.set(HL_COLORS[h.kind] || '#ffffff');
+      // 加算合成だと緑の地面の上で赤や橙が黄色っぽく見えるため、範囲表示は通常合成で塗る
+      const blend = SOLID_HL.has(h.kind) ? THREE.NormalBlending : THREE.AdditiveBlending;
+      if (tv.hlMat.blending !== blend) { tv.hlMat.blending = blend; tv.hlMat.needsUpdate = true; }
+    }
+  }
+
+  // まだ行動できるユニット: 足元の輪が金色に脈打ち、光の粒が立ちのぼる
+  setReady(uids) {
+    const set = new Set(uids);
+    for (const uv of this.units.values()) {
+      const on = set.has(uv.uid);
+      if (uv.ready === on) continue;
+      uv.ready = on;
+      const m = uv.base.userData.ringMat;
+      if (on) { m.color.set('#ffd24a'); m.emissive.set('#ffb02a'); }
+      else { m.color.set(TEAM_COLORS[uv.owner]); m.emissive.set(TEAM_COLORS[uv.owner]); m.emissiveIntensity = uv.exhausted ? 0.25 : 1.4; }
     }
   }
 
@@ -803,7 +825,7 @@ export class BoardView {
     // タイル: ハイライトの脈動、結晶の回転、溶岩の泡
     const pulse = 0.55 + Math.sin(t * 4) * 0.2;
     for (const tv of this.tiles.values()) {
-      if (tv.hlKind) tv.hlMat.opacity = tv.hlKind === 'danger' ? 0.22 + Math.sin(t * 3) * 0.08 : pulse;
+      if (tv.hlKind) tv.hlMat.opacity = tv.hlKind === 'danger' ? 0.22 + Math.sin(t * 3) * 0.08 : tv.hlKind === 'ready' ? 0.5 + Math.sin(t * 3.5) * 0.25 : tv.hlKind === 'erange' ? 0.6 : tv.hlKind === 'emove' ? 0.75 : pulse;
       else tv.hlMat.opacity = tv === this.hoverTile ? 0.35 : 0;
       if (tv === this.hoverTile) { tv.hlMat.opacity = Math.max(tv.hlMat.opacity, 0.9); if (!tv.hlKind) tv.hlMat.color.set('#ffffff'); }
       for (const d of tv.deco.children) if (d.userData.spin) { d.rotation.y = t * 1.2; d.position.y = 1.05 + Math.sin(t * 2 + tv.id) * 0.06; }
@@ -838,6 +860,15 @@ export class BoardView {
       const selO = uv.selected ? 0.8 + Math.sin(t * 5) * 0.2 : 0;
       uv.sel.material.opacity += (selO - uv.sel.material.opacity) * Math.min(1, dt * 10);
       uv.sel.rotation.z = t;
+      if (uv.ready) {
+        uv.base.userData.ringMat.emissiveIntensity = 1.6 + Math.sin(t * 4 + uv.phase) * 1.0;
+        if (Math.random() < dt * 5) {
+          const p = uv.group.position.clone();
+          const a = Math.random() * Math.PI * 2;
+          p.x += Math.cos(a) * 0.36; p.z += Math.sin(a) * 0.36; p.y += 0.05;
+          this.fx.burst(p, { count: 1, color: '#fff3b0', colorEnd: '#ffb02a', speed: [0.1, 0.2], dir: new THREE.Vector3(0, 1, 0), spread: 0.1, up: 0.6, life: [0.6, 0.9], size: [0.05, 0.08], drag: 0.5 });
+        }
+      }
       if (uv.status.visible) uv.status.position.y = uv.height + 0.05 + Math.sin(t * 2 + uv.phase) * 0.04;
     }
 

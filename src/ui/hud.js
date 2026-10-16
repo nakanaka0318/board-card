@@ -172,6 +172,11 @@ export class HUD {
     const myTurn = !ctx.watch && state.winner === null && state.current === ctx.human && !aiThinking;
     et.disabled = !myTurn;
     et.classList.toggle('ready', !!(humanTurn && ctx.noMoves));
+    const sub = et.querySelector('.et-sub');
+    if (sub) {
+      sub.textContent = ctx.readyCount ? `行動可能 ${ctx.readyCount}体` : 'Enter';
+      sub.classList.toggle('cnt', !!ctx.readyCount);
+    }
   }
 
   renderHand(state, p, { humanTurn, selectedHand }) {

@@ -58,8 +58,8 @@ export const FACTIONS = {
     hero: {
       name: '芽吹き',
       cost: 2,
-      target: 'friendlyAny',
-      text: '味方1体 (将を含む) のHPを2回復。',
+      target: 'friendlyUnit',
+      text: '味方ユニット1体 (将を除く) のHPを2回復。',
       fx: 'heal',
       effect(G, c) { G.heal(c.target, 2); },
     },
@@ -435,7 +435,7 @@ def('az_magnet', {
     if (es[0]) { G.fx('wave', c.self, null, {}); G.pull(es[0], c.self.x, c.self.y); }
   },
 });
-def('az_sniper', { name: '狙撃機兵', faction: 'azure', type: 'unit', cost: 4, atk: 2, hp: 3, move: 1, range: 4, model: 'gunner', text: '' });
+def('az_sniper', { name: '狙撃機兵', faction: 'azure', type: 'unit', cost: 4, atk: 3, hp: 3, move: 1, range: 4, model: 'gunner', text: '' });
 def('az_titan', { name: '機甲巨神', faction: 'azure', type: 'unit', cost: 6, atk: 5, hp: 7, move: 1, armor: 2, keywords: ['guard'], model: 'titan', legend: true, text: '' });
 def('s_overclock', {
   name: '過負荷駆動', faction: 'azure', type: 'spell', cost: 2, target: 'friendlyUnit', icon: '⚡', fx: 'buff',

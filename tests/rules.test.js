@@ -215,3 +215,26 @@ test('指揮力: 移動・攻撃は1ターン合計3回、移動して攻撃は2
   assert.ok(applyAction(s, { type: 'move', uid: us[3].uid, x: 3, y: 4 }));
   assert.equal(s.players[0].cp, 0);
 });
+
+test('将の移動: 指揮力を使わず、森・水辺や1段の段差も1マス、崖は登れない', () => {
+  const s = blank();
+  const L = leaderOf(s, 0);
+  L.x = 3; L.y = 2;
+  tileAt(s, 3, 3).terrain = 'forest'; tileAt(s, 3, 3).height = 1;
+  tileAt(s, 4, 2).height = 2;
+  s.players[0].cp = 0;
+  const r = reachable(s, L);
+  assert.ok(r.tiles.includes(idx(3, 3)), '森+1段に移動できる');
+  assert.ok(!r.tiles.includes(idx(4, 2)), '段差2は登れない');
+  assert.ok(applyAction(s, { type: 'move', uid: L.uid, x: 3, y: 3 }));
+  assert.equal(s.players[0].cp, 0);
+  // 移動して攻撃は攻撃分の指揮力 1 だけ
+  const s2 = blank();
+  const L2 = leaderOf(s2, 0);
+  L2.x = 3; L2.y = 2;
+  const e = addUnit(s2, 1, 'fi_blade', 3, 4);
+  e.hp = e.maxHp = 20;
+  s2.players[0].cp = 1;
+  assert.ok(applyAction(s2, { type: 'moveAttack', uid: L2.uid, x: 3, y: 3, target: e.uid }));
+  assert.equal(s2.players[0].cp, 0);
+});
