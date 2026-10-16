@@ -548,7 +548,7 @@ def('az_stargazer', {
 // ---------------- 雷研究室 ----------------
 // 「没入の実験体」: subject: true を持つカードはすべて「没入の実験体」として数える
 def('lb_subject', {
-  name: '没入の実験体', faction: 'lab', type: 'unit', cost: 1, atk: 2, hp: 1, move: 3, keywords: ['haste'], model: 'subject', subject: true,
+  name: '没入の実験体', faction: 'lab', type: 'unit', cost: 1, atk: 2, hp: 1, move: 2, keywords: ['haste'], model: 'subject', subject: true,
   text: '',
 });
 def('lb_subject_a', {
@@ -588,11 +588,11 @@ def('s_lb_crow', {
   },
 });
 def('lb_feelin', {
-  name: '破式の変貌・フィーリン', faction: 'lab', type: 'unit', cost: 5, atk: 2, hp: 3, move: 3, range: 3, model: 'feelin', legend: true, env: 'lab',
+  name: '破式の変貌・フィーリン', faction: 'lab', type: 'unit', cost: 6, atk: 2, hp: 3, move: 3, range: 3, model: 'feelin', legend: true, env: 'lab',
   text: '環境「研究室」: 場にいる間、「没入の実験体」すべて+2/+2。',
 });
 def('lb_sephy', {
-  name: '万術の黒研究・セフィー', faction: 'lab', type: 'unit', cost: 7, atk: 7, hp: 5, move: 2, keywords: ['haste'], model: 'sephy', legend: true,
+  name: '万術の黒研究・セフィー', faction: 'lab', type: 'unit', cost: 8, atk: 7, hp: 5, move: 2, keywords: ['haste'], model: 'sephy', legend: true,
   text: '自分のターン終了時: 場にいる「没入の実験体」の数だけ、相手のランダムなユニット (将を含む) に1ダメージを与える。',
   onTurnEnd(G, c) {
     const n = G.subjects().length;
