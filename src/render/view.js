@@ -10,6 +10,7 @@ import { CARDS } from '../engine/cards.js';
 import { W, H, idx } from '../engine/rules.js';
 import { Animator, ease } from './tween.js';
 import { FX } from './fx.js';
+import { screenFlash, vignette, cutIn } from '../ui/screenfx.js';
 import { buildUnitModel, buildBase, MODEL_HEIGHT } from './models.js';
 import {
   makeTerrainTextures, makeSideTexture, makeBaseTexture, makeFrameTexture, makeBadgeCanvas, drawBadge,
@@ -740,6 +741,25 @@ export class BoardView {
 
   doShake(amount = 0.15) { this.shake = Math.max(this.shake, amount); }
 
+  // 決着時: 花火を打ち上げ、カメラがゆっくり盤面を回る
+  async celebrate(color, win = true, sfx = () => {}) {
+    const A = this.anim;
+    const c0 = this.camera.position.clone(), t0 = this.controls.target.clone();
+    const r = Math.hypot(c0.x - t0.x, c0.z - t0.z), a0 = Math.atan2(c0.x - t0.x, c0.z - t0.z);
+    A.tween(4.5, (k) => {
+      const a = a0 + k * 0.9;
+      this.camera.position.set(t0.x + Math.sin(a) * r, c0.y, t0.z + Math.cos(a) * r);
+    }, ease.inOut);
+    if (!win) return;
+    const cols = [color, '#ffd24a', '#ffffff', '#ff8ad8', '#7fffb0'];
+    for (let i = 0; i < 9; i++) {
+      const p = new THREE.Vector3((Math.random() - 0.5) * 7, 2.6 + Math.random() * 1.6, (Math.random() - 0.5) * 6);
+      this.fx.firework(p, cols[i % cols.length]);
+      sfx('firework');
+      await A.wait(0.35 + Math.random() * 0.2);
+    }
+  }
+
   // ------------------------------------------------------------
   // フレーム更新
   // ------------------------------------------------------------
@@ -853,22 +873,43 @@ export class BoardView {
         const tv = this.tiles.get(e.tileId);
         const pos = new THREE.Vector3(tv.group.position.x, tv.surface, tv.group.position.z);
         const col = TEAM_COLORS[u.owner];
+        const card = CARDS[u.cardId];
+        const big = card.cost >= 6 || card.legend;
+        const base = u.leader ? 1.08 : 1;
         uv.override = true;
         uv.group.position.copy(pos);
-        uv.group.scale.setScalar(0.01);
+        uv.group.scale.setScalar(0.001);
         sfx('summon');
-        this.fx.pillar(pos, col, 5, 1.0);
-        this.fx.ring(pos, col, 0.9, 0.7);
-        this.fx.flash(pos, col, 10, 0.6);
-        this.fx.burst(pos, { count: 60, color: '#ffffff', colorEnd: col, speed: [0.5, 2], dir: new THREE.Vector3(0, 1, 0), spread: 0.8, life: [0.5, 1.1], size: [0.06, 0.14], gravity: 1 });
-        const card = CARDS[u.cardId];
-        if (card.cost >= 6) { this.doShake(0.2); sfx('big'); }
-        await A.tween(0.55, (k) => {
-          uv.group.scale.setScalar(Math.max(0.01, k * (u.leader ? 1.08 : 1)));
-          uv.group.position.y = pos.y + (1 - k) * 0.8;
-        }, ease.outBack);
+        // 召喚陣が開き、光が集まる
+        this.fx.summonCircle(pos, col, big ? 0.85 : 0.6, big ? 1.8 : 1.2);
+        this.fx.burst(pos.clone().add(new THREE.Vector3(0, 0.05, 0)), { count: big ? 50 : 26, color: col, colorEnd: '#ffffff', speed: [0.1, 0.3], up: 0.9, life: [0.4, 0.7], size: [0.05, 0.1], area: big ? 0.8 : 0.5, drag: 1 });
+        if (card.legend) {
+          this.fx.rays(pos, '#ffd24a', 2.2);
+          sfx('cutin');
+          await cutIn(u.cardId, u.owner, A.speed);
+        }
+        await A.wait(big ? 0.28 : 0.16);
+        // 上空から降り立つ
+        const drop = big ? 3.2 : 1.7;
+        this.fx.pillar(pos, col, big ? 6 : 4.5, big ? 1.1 : 0.8, big ? 0.5 : 0.36);
+        uv.group.scale.set(base * 0.8, base * 1.25, base * 0.8);
+        await A.tween(big ? 0.3 : 0.22, (k) => { uv.group.position.y = pos.y + (1 - k) * drop; }, ease.in);
+        // 着地: 衝撃波・土煙・ヒットストップ
+        uv.group.position.y = pos.y;
+        this.fx.ring(pos, col, big ? 1.8 : 1.0, 0.6);
+        this.fx.ring(pos, '#ffffff', big ? 1.1 : 0.6, 0.35);
+        this.fx.flash(pos, col, big ? 16 : 10, 0.6);
+        this.fx.burst(pos, { count: big ? 90 : 50, color: '#ffffff', colorEnd: col, speed: [0.5, 2.2], dir: new THREE.Vector3(0, 1, 0), spread: 0.8, life: [0.5, 1.1], size: [0.06, 0.14], gravity: 1 });
+        this.fx.burst(pos, { count: big ? 40 : 18, color: '#d8c8a8', colorEnd: '#6a5a48', speed: [0.8, 1.8], dir: new THREE.Vector3(0, 0.15, 0), spread: 1, life: [0.4, 0.8], size: [0.08, 0.16], gravity: 0.5, drag: 2 });
+        if (big) { this.doShake(0.3); A.hitStop(90); sfx('explode'); if (card.legend) screenFlash('#ffe8a0', 300, 0.4); }
+        else this.doShake(0.06);
+        await A.tween(0.32, (k) => {
+          const q = Math.sin(k * Math.PI) * (1 - k);
+          uv.group.scale.set(base * (1 + q * 0.35), base * (1 - q * 0.45), base * (1 + q * 0.35));
+        }, ease.linear);
+        uv.group.scale.setScalar(base);
         uv.override = false;
-        await A.wait(0.1);
+        await A.wait(0.08);
         break;
       }
       case 'move': {
@@ -899,27 +940,46 @@ export class BoardView {
         this.faceToward(a, ta.gx, ta.gy);
         if (!e.counter) this.faceToward(t, aa.gx, aa.gy);
         const from = this.unitWorldPos(e.uid, 0.45), to = this.unitWorldPos(e.target, 0.4);
+        const col = TEAM_COLORS[a.owner];
         if (e.ranged) {
           const model = e.fx;
           const kind = ['archer', 'elf', 'gunner'].includes(model) ? 'arrow' : 'orb';
           const color = model === 'turret' || model === 'gunner' ? '#7ff4ff' : model === 'mage' ? '#ffb347' : model === 'druid' ? '#9aff7a' : model === 'tidemage' ? '#5fd8ff' : '#ffffff';
-          sfx(kind === 'arrow' ? 'bow' : 'magic');
+          // 溜め: 力が集まる
           a.override = true;
           const p0 = a.group.position.clone();
-          await A.tween(0.12, (k) => { a.group.position.y = p0.y + Math.sin(k * Math.PI) * 0.08; });
-          a.override = false;
+          this.fx.flash(from, color, 5, 0.45);
+          const charge = from.clone().add(new THREE.Vector3(0, 0.1, 0));
+          this.fx.burst(charge, { count: 16, color: '#ffffff', colorEnd: color, speed: [0.2, 0.6], life: [0.2, 0.35], size: [0.04, 0.08], area: 0.25, drag: 3 });
+          await A.tween(0.22, (k) => { a.group.position.y = p0.y - Math.sin(k * Math.PI * 0.5) * 0.05; }, ease.out);
+          sfx(kind === 'arrow' ? 'bow' : 'magic');
+          await A.tween(0.08, (k) => { a.group.position.y = p0.y - 0.05 + k * 0.13; });
+          A.tween(0.15, (k) => { a.group.position.y = p0.y + 0.08 * (1 - k); }).then(() => { a.override = false; });
           await this.fx.projectile(from, to, kind, color);
+          this.fx.impact(to, color, 0.8);
+          A.hitStop(45);
         } else {
           a.override = true;
           const p0 = a.group.position.clone();
           const dir = t.group.position.clone().sub(p0);
           dir.y = 0;
           dir.normalize();
+          // 振りかぶり
+          await A.tween(0.16, (k) => {
+            a.group.position.copy(p0).addScaledVector(dir, -0.16 * k);
+            a.group.position.y = p0.y + k * 0.06;
+          }, ease.out);
           sfx('swing');
-          await A.tween(0.12, (k) => { a.group.position.copy(p0).addScaledVector(dir, -0.12 * k); }, ease.out);
-          await A.tween(0.1, (k) => { a.group.position.copy(p0).addScaledVector(dir, -0.12 + 0.55 * k); a.group.position.y = p0.y + Math.sin(k * Math.PI) * 0.1; }, ease.in);
-          this.fx.burst(to, { count: 18, color: '#ffffff', colorEnd: '#ffcf8a', speed: [1, 2.5], life: [0.15, 0.35], size: [0.05, 0.1] });
-          A.tween(0.25, (k) => { a.group.position.copy(p0).addScaledVector(dir, 0.43 * (1 - k)); }, ease.out).then(() => { a.override = false; });
+          // 踏み込み
+          await A.tween(0.09, (k) => { a.group.position.copy(p0).addScaledVector(dir, -0.16 + 0.6 * k); a.group.position.y = p0.y + 0.06 + Math.sin(k * Math.PI) * 0.12; }, ease.in);
+          // 命中: 斬撃・閃光・ヒットストップ
+          const hit = to.clone().addScaledVector(dir, -0.15);
+          this.fx.slash(hit, dir, e.counter ? '#ffd0d0' : '#ffffff', 0.6);
+          this.fx.impact(hit, col, 1.0);
+          this.fx.burst(hit, { count: 24, color: '#ffffff', colorEnd: '#ffcf8a', speed: [1.2, 3], life: [0.15, 0.35], size: [0.05, 0.1] });
+          A.hitStop(e.counter ? 50 : 85);
+          this.doShake(0.08);
+          A.tween(0.3, (k) => { a.group.position.copy(p0).addScaledVector(dir, 0.44 * (1 - k)); }, ease.out).then(() => { a.override = false; });
         }
         break;
       }
@@ -931,16 +991,25 @@ export class BoardView {
         this.redrawBadge(uv);
         if (e.amount > 0) {
           sfx(e.source === 'lava' ? 'burn' : 'hit');
-          this.fx.floatText(pos, '-' + e.amount, '#ff5a5a', 0.55 + Math.min(0.3, e.amount * 0.04));
-          this.fx.burst(this.unitWorldPos(e.uid, 0.4), { count: 14 + e.amount * 3, color: '#ff4a3a', colorEnd: '#5a0a0a', speed: [0.8, 2], life: [0.3, 0.6], size: [0.05, 0.1], gravity: 4 });
-          if (e.amount >= 4) this.doShake(0.12);
-          // ノックバック
+          const heavy = e.amount >= 4;
+          this.fx.floatText(pos, '-' + e.amount, heavy ? '#ffd24a' : '#ff5a5a', 0.6 + Math.min(0.45, e.amount * 0.07));
+          this.fx.burst(this.unitWorldPos(e.uid, 0.4), { count: 14 + e.amount * 4, color: '#ff4a3a', colorEnd: '#5a0a0a', speed: [0.8, 2.2], life: [0.3, 0.6], size: [0.05, 0.11], gravity: 4 });
+          if (heavy) { sfx('crit'); this.doShake(0.16); this.fx.impact(this.unitWorldPos(e.uid, 0.45), '#ffb02a', 1.4); screenFlash('#ffffff', 180, 0.25); }
+          if (uv.leader) {
+            this.fx.ring(this.unitWorldPos(e.uid, 0.05), '#ff4040', 0.9, 0.45);
+            if (this.viewer !== null && this.viewer !== undefined && uv.owner === this.viewer) vignette('#ff2040', 750);
+          }
+          // 被弾: のけぞり + 潰れ
           uv.override = true;
           const p0 = uv.group.position.clone();
-          await A.tween(0.18, (k) => {
+          const s0 = uv.group.scale.x;
+          await A.tween(0.24, (k) => {
             uv.group.position.copy(p0);
-            uv.group.position.x += Math.sin(k * Math.PI * 4) * 0.05 * (1 - k);
+            uv.group.position.x += Math.sin(k * Math.PI * 4) * 0.06 * (1 - k);
+            const q = Math.sin(k * Math.PI) * (1 - k) * 0.5;
+            uv.group.scale.set(s0 * (1 + q * 0.3), s0 * (1 - q * 0.35), s0 * (1 + q * 0.3));
           }, ease.linear);
+          uv.group.scale.setScalar(s0);
           uv.override = false;
         } else {
           sfx('block');
@@ -1010,15 +1079,31 @@ export class BoardView {
         uv.override = true;
         const p0 = uv.group.position.clone();
         const col = TEAM_COLORS[uv.owner];
-        this.fx.burst(p0.clone().add(new THREE.Vector3(0, 0.3, 0)), { count: 70, color: '#ffffff', colorEnd: col, speed: [0.5, 2.2], life: [0.6, 1.2], size: [0.06, 0.14], gravity: -0.5, drag: 2 });
-        this.fx.ring(p0, col, 0.7, 0.6);
-        await A.tween(0.55, (k) => {
-          uv.group.scale.setScalar(Math.max(0.001, 1 - k));
-          uv.group.position.y = p0.y - k * 0.2;
-          uv.facing.rotation.y += 0.25;
+        const mid = p0.clone().add(new THREE.Vector3(0, 0.3, 0));
+        if (e.leader) {
+          // 将の最期: 時間が止まり、白い閃光とともに砕け散る
+          A.hitStop(420);
+          screenFlash('#ffffff', 600, 0.75);
+          this.doShake(0.45);
+          this.fx.rays(p0, col, 2.4);
+          this.fx.ring(p0, '#ffffff', 3.2, 1.0);
+        }
+        // 白く膨らんでから砕ける
+        const s0 = uv.group.scale.x;
+        await A.tween(0.16, (k) => { uv.group.scale.set(s0 * (1 + k * 0.18), s0 * (1 - k * 0.12), s0 * (1 + k * 0.18)); uv.facing.rotation.z = Math.sin(k * 30) * 0.05; }, ease.out);
+        this.fx.flash(mid, col, e.leader ? 22 : 10, 0.5);
+        this.fx.shards(mid, [col, '#ffffff', '#40384e'], e.leader ? 46 : 18, p0.y);
+        this.fx.soul(p0.clone().add(new THREE.Vector3(0, 0.5, 0)), col);
+        this.fx.floatText(p0.clone().add(new THREE.Vector3(0, 1.25, 0)), e.leader ? '将 撃破' : '撃破', e.leader ? '#ffd24a' : '#ffffff', e.leader ? 0.7 : 0.42, 1.4);
+        this.fx.burst(mid, { count: e.leader ? 160 : 70, color: '#ffffff', colorEnd: col, speed: [0.5, e.leader ? 3.5 : 2.2], life: [0.6, 1.2], size: [0.06, 0.14], gravity: -0.5, drag: 2 });
+        this.fx.ring(p0, col, e.leader ? 2.2 : 0.9, 0.6);
+        await A.tween(0.22, (k) => {
+          uv.group.scale.setScalar(Math.max(0.001, s0 * 1.15 * (1 - k)));
+          uv.facing.rotation.y += 0.3;
         }, ease.in);
         this.world.remove(uv.group);
         this.units.delete(e.uid);
+        await A.wait(e.leader ? 0.6 : 0.15);
         break;
       }
       case 'tile': {
@@ -1163,6 +1248,15 @@ export class BoardView {
     const from = e.from ? this.unitWorldPos(e.from.uid, 0.9) : null;
     const tu = target ? [...this.units.values()].find((u) => { const tv = this.tiles.get(u.tileId); return tv.gx === e.x && tv.gy === e.y; }) : null;
     const tpos = tu ? this.unitWorldPos(tu.uid, 0.4) : target ? target.clone().add(new THREE.Vector3(0, 0.3, 0)) : null;
+    // 詠唱: 術者の足元に魔法陣
+    if (e.from && this.units.get(e.from.uid)) {
+      const feet = this.unitWorldPos(e.from.uid, 0);
+      this.fx.summonCircle(feet, TEAM_COLORS[e.player] || '#ffffff', 0.5, 0.9);
+      this.fx.burst(feet, { count: 18, color: TEAM_COLORS[e.player] || '#ffffff', colorEnd: '#ffffff', speed: [0.2, 0.5], up: 1, life: [0.4, 0.7], size: [0.04, 0.08], area: 0.35, drag: 1 });
+    }
+    if (target) this.fx.summonCircle(target, '#ffffff', 0.42, 0.8);
+    if (e.cardId && CARDS[e.cardId]?.legend) { sfx('cutin'); await cutIn(e.cardId, e.player, A.speed); }
+    await A.wait(0.15);
     switch (e.fx) {
       case 'lightning':
         sfx('thunder');

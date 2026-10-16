@@ -230,6 +230,9 @@ export class Sound {
       case 'turn': T({ f: 523, type: 'triangle', dur: 0.6, vol: 0.14, rev: 0.6 }); T({ f: 784, type: 'triangle', dur: 0.7, vol: 0.12, at: 0.12, rev: 0.6 }); break;
       case 'enemyturn': T({ f: 330, type: 'triangle', dur: 0.6, vol: 0.14, rev: 0.6 }); T({ f: 247, type: 'triangle', dur: 0.7, vol: 0.12, at: 0.12, rev: 0.6 }); break;
       case 'think': T({ f: 1046 + Math.random() * 400, type: 'sine', dur: 0.05, vol: 0.025, rev: 0.5 }); break;
+      case 'firework': T({ f: 600, f2: 1600, type: 'sine', dur: 0.25, vol: 0.05, rev: 0 }); N({ dur: 0.5, vol: 0.22, freq: 2500, f2: 300, at: 0.25, q: 0.6 }); break;
+      case 'cutin': N({ dur: 0.45, vol: 0.25, freq: 600, f2: 4000, q: 0.7 }); T({ f: 392, f2: 784, type: 'sawtooth', dur: 0.35, vol: 0.06, rev: 0.7 }); break;
+      case 'crit': N({ dur: 0.25, vol: 0.45, freq: 2200, f2: 200, q: 0.7 }); T({ f: 120, f2: 40, type: 'square', dur: 0.25, vol: 0.2 }); break;
       case 'error': T({ f: 200, type: 'square', dur: 0.15, vol: 0.08 }); break;
       case 'victory': [523, 659, 784, 1046, 784, 1046, 1318].forEach((f, i) => T({ f, type: 'triangle', dur: 0.5, vol: 0.14, at: i * 0.13, rev: 0.6 })); break;
       case 'defeat': [392, 349, 311, 262].forEach((f, i) => T({ f, type: 'triangle', dur: 0.7, vol: 0.14, at: i * 0.25, rev: 0.6 })); break;

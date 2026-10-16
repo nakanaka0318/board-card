@@ -19,8 +19,14 @@ export class Animator {
     this.speed = 1;
   }
 
+  // 打撃の瞬間に時間を一瞬ほぼ止める (ヒットストップ)
+  hitStop(ms) {
+    this.stopUntil = Math.max(this.stopUntil || 0, performance.now() + ms);
+  }
+
   update(dt) {
-    const d = dt * this.speed;
+    let d = dt * this.speed;
+    if (this.stopUntil && performance.now() < this.stopUntil) d *= 0.04;
     const list = this.items;
     this.items = [];
     for (const it of list) {

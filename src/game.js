@@ -1,7 +1,7 @@
 // 対局の進行役: ルールエンジン・3D ビュー・HUD・AI をつなぐ。
 import { CARDS, FACTIONS } from './engine/cards.js';
 import {
-  W, idx, dist, createGame, applyAction, reachable, pathTo, targetsFrom, canMove, canAttack, canPlay,
+  W, idx, dist, createGame, applyAction, reachable, pathTo, targetsFrom, canMove, canAttack, canPlay, cpOf, COMMAND_POINTS,
   canHero, cardTargets, targetsFor, unitAt, unitById, forecast, hasAnyAction, effRangeAt, tileAt, coordName,
 } from './engine/rules.js';
 import { DIFFICULTY, planTurn, describePlan, intentOf, evaluate, winProb, threatMap } from './engine/ai.js';
@@ -51,6 +51,7 @@ export class Game {
     const s = this.state;
     for (const u of s.units) this.unitCard.set(u.uid, u.cardId);
     s.events = [];
+    this.view.viewer = this.human;
     this.view.buildBoard(s);
     this.view.sync(s);
     this.view.clearHighlights();
@@ -168,6 +169,9 @@ export class Game {
           break;
         case 'mana':
           this.hud.setMana(e.player, e.mana, s.players[e.player].maxMana);
+          break;
+        case 'cp':
+          this.hud.setCp(e.player, e.cp);
           break;
         case 'crystal':
           this.hud.addLog(`${this.names[e.player]}: マナ結晶から +${e.amount} マナ`, 'p' + e.player);
@@ -456,7 +460,7 @@ export class Game {
     if (canMove(s, u)) sel.reach = reachable(s, u);
     if (canAttack(s, u)) {
       sel.direct = targetsFrom(s, u, u.x, u.y);
-      if (sel.reach) {
+      if (sel.reach && cpOf(s, u.owner) >= 2) {
         for (const i of sel.reach.tiles) {
           const x = i % W, y = (i / W) | 0;
           for (const t of targetsFrom(s, u, x, y)) {
@@ -579,12 +583,13 @@ export class Game {
 
   trySelectUnit(u) {
     const s = this.state;
-    if (canMove(s, u) || (canAttack(s, u) && (targetsFrom(s, u, u.x, u.y).length || canMove(s, u)))) {
+    if (canMove(s, u) || (canAttack(s, u) && targetsFrom(s, u, u.x, u.y).length)) {
       // 選択中は下の案内バーに情報が出るので、上の簡易表示は閉じる
       this.hud.hideInspector(true);
       return this.selectUnit(u);
     }
-    this.hud.toast(u.sick ? 'このユニットは召喚されたばかりで、次のターンから行動できます' : u.frozen ? 'このユニットは凍結しています' : 'このユニットは行動済みです');
+    this.hud.toast(u.sick ? 'このユニットは召喚されたばかりで、次のターンから行動できます' : u.frozen ? 'このユニットは凍結しています'
+      : cpOf(s, u.owner) <= 0 ? '指揮力が残っていません (移動・攻撃は1ターンに合計3回まで)' : 'このユニットは行動済みです');
     this.sfx('error');
     this.clearSelection();
   }
@@ -657,11 +662,13 @@ export class Game {
       if (!u) { this.hud.setActionBar(null); return; }
       const parts = [];
       if (sel.reach && sel.reach.tiles.length) parts.push('<span class="ab-move">青</span>のマスへ移動');
-      if (sel.direct.length || sel.viaMove.size) parts.push('<span class="ab-atk">赤</span>の敵を攻撃 (移動も自動)');
+      if (sel.direct.length || sel.viaMove.size) parts.push(sel.viaMove.size ? '<span class="ab-atk">赤</span>の敵を攻撃 (移動も自動)' : '<span class="ab-atk">赤</span>の敵を攻撃');
+      const cp = cpOf(s, u.owner);
+      parts.push(`<span class="ab-cp">指揮 ${cp}/${COMMAND_POINTS}</span> (移動・攻撃 −1、移動して攻撃 −2)`);
       const name = u.leader ? 'あなたの将' : CARDS[u.cardId].name;
       this.hud.setActionBar({
         title: `${name} <small>⚔${u.atk} ❤${u.hp}</small>`,
-        hint: parts.length ? parts.join(' / ') : 'このターンにできることはありません',
+        hint: parts.length > 1 ? parts.slice(0, -1).join(' / ') + '<br>' + parts[parts.length - 1] : 'このターンにできることはありません / ' + parts[0],
         buttons: [{ label: '詳細', onClick: () => showCardDetail(u.cardId, { unit: u, state: s, ownerName: this.names[u.owner] }) }, { label: '選択解除', onClick: cancel.onClick }],
       });
     }
@@ -822,10 +829,11 @@ export class Game {
 
   async gameOver() {
     const s = this.state;
-    await sleep(900);
-    if (this.aborted) return;
     const w = s.winner;
     const win = this.human !== null && w === this.human;
+    if (w !== -1) this.view.celebrate(['#38d0ff', '#ff4d6d'][w], this.human === null || win, (n) => this.sfx(n));
+    await sleep(win || this.human === null ? 2600 : 1600);
+    if (this.aborted) return;
     const title = document.getElementById('go-title');
     if (this.opts.watch) {
       title.textContent = w === -1 ? 'DRAW' : 'FINISH';

@@ -95,7 +95,7 @@ for (const f of Object.keys(FACTIONS)) {
   def('leader_' + f, {
     name: FACTIONS[f].name + 'の将',
     faction: f, type: 'leader', cost: 0,
-    atk: 2, hp: 18, move: 1, model: 'leader',
+    atk: 2, hp: 16, move: 1, model: 'leader',
     text: 'リーダー。HPが0になると敗北する。',
   });
 }
@@ -260,7 +260,7 @@ def('az_tide', {
 def('az_guardian', { name: '鋼鉄の守護者', faction: 'azure', type: 'unit', cost: 4, atk: 3, hp: 6, move: 1, armor: 2, keywords: ['guard'], model: 'mech', text: '' });
 def('az_turret', { name: '浮遊砲台', faction: 'azure', type: 'unit', cost: 5, atk: 4, hp: 4, move: 2, range: 3, keywords: ['flying'], model: 'turret', text: '' });
 def('az_leviathan', {
-  name: '嵐の巨鯨', faction: 'azure', type: 'unit', cost: 7, atk: 5, hp: 7, move: 3, keywords: ['flying'], model: 'whale',
+  name: '嵐の巨鯨', faction: 'azure', type: 'unit', cost: 6, atk: 5, hp: 7, move: 3, keywords: ['flying'], model: 'whale',
   text: '召喚時: 2マス以内の敵ユニットすべてに1ダメージを与え、凍結させる。',
   onSummon(G, c) {
     G.fx('storm', c.self, null, { radius: 2 });
@@ -282,7 +282,7 @@ def('f_slide', {
   effect(G, c) { G.shiftRow(c.y, c.dir); },
 });
 def('f_rotate', {
-  name: '旋回陣', faction: 'azure', type: 'field', cost: 3, target: 'block', dir: true, icon: '🌀', fx: 'rotate',
+  name: '旋回陣', faction: 'azure', type: 'field', cost: 2, target: 'block', dir: true, icon: '🌀', fx: 'rotate',
   text: '3x3の区画を90度回転させる。上のユニットも一緒に回る。',
   effect(G, c) { G.rotateBlock(c.x, c.y, c.dir); },
 });
@@ -392,14 +392,14 @@ def('fo_seedling', {
   onTurnStart(G, c) { G.buff(c.self, 1, 1); },
 });
 def('fo_dryad', {
-  name: 'ドライアド', faction: 'forest', type: 'unit', cost: 2, atk: 3, hp: 3, move: 2, keywords: ['forestKin'], model: 'elf',
+  name: 'ドライアド', faction: 'forest', type: 'unit', cost: 2, atk: 2, hp: 3, move: 2, keywords: ['forestKin'], model: 'elf',
   text: '召喚時: 森の上なら+1/+1。',
   onSummon(G, c) { if (G.s.tiles[c.self.y * 7 + c.self.x].terrain === 'forest') G.buff(c.self, 1, 1); },
 });
 def('fo_wisp', { name: '森の精霊', faction: 'forest', type: 'unit', cost: 2, atk: 2, hp: 3, move: 3, regen: 1, keywords: ['flying'], model: 'wisp', text: '' });
 def('fo_bear', { name: '大熊', faction: 'forest', type: 'unit', cost: 4, atk: 5, hp: 6, move: 2, model: 'bear', text: '' });
 def('fo_elder', {
-  name: '長老樹', faction: 'forest', type: 'unit', cost: 6, atk: 5, hp: 9, move: 1, regen: 2, keywords: ['guard'], model: 'elder', legend: true,
+  name: '長老樹', faction: 'forest', type: 'unit', cost: 6, atk: 4, hp: 8, move: 1, regen: 2, keywords: ['guard'], model: 'elder', legend: true,
   text: '召喚時: 周囲のマスを森にする。',
   onSummon(G, c) { for (const [x, y] of G.cross(c.self.x, c.self.y)) G.setTerrain(x, y, 'forest'); },
 });
@@ -435,12 +435,12 @@ def('az_magnet', {
     if (es[0]) { G.fx('wave', c.self, null, {}); G.pull(es[0], c.self.x, c.self.y); }
   },
 });
-def('az_sniper', { name: '狙撃機兵', faction: 'azure', type: 'unit', cost: 4, atk: 3, hp: 3, move: 1, range: 4, model: 'gunner', text: '' });
+def('az_sniper', { name: '狙撃機兵', faction: 'azure', type: 'unit', cost: 4, atk: 2, hp: 3, move: 1, range: 4, model: 'gunner', text: '' });
 def('az_titan', { name: '機甲巨神', faction: 'azure', type: 'unit', cost: 6, atk: 5, hp: 7, move: 1, armor: 2, keywords: ['guard'], model: 'titan', legend: true, text: '' });
 def('s_overclock', {
   name: '過負荷駆動', faction: 'azure', type: 'spell', cost: 2, target: 'friendlyUnit', icon: '⚡', fx: 'buff',
-  text: '味方ユニット1体の攻撃力+2、移動力+1。',
-  effect(G, c) { G.buff(c.target, 2, 0); G.addMove(c.target, 1); },
+  text: '味方ユニット1体の攻撃力+1、移動力+1。',
+  effect(G, c) { G.buff(c.target, 1, 0); G.addMove(c.target, 1); },
 });
 def('f_maelstrom', {
   name: '大渦', faction: 'azure', type: 'field', cost: 4, target: 'block', icon: '🌀', fx: 'rotate', legend: true,
@@ -506,7 +506,7 @@ export const PRESETS = {
   fire: [
     { id: 'fire_std', name: '紅蓮の進軍', desc: '突撃ユニットと火力で押し切る標準型。', cards: build([
       'fi_imp', 'fi_blade', 'fi_pyro', 'fi_berserker', 'fi_golem', 'fi_salamander', ['fi_dragon', 1],
-      's_fireball', 'f_eruption', 's_warcry', 'n_squire', 'n_archer', 'n_cavalry', 's_lightning', 'f_uplift', ['fi_guard', 1],
+      's_fireball', 'f_eruption', 's_warcry', 'n_assassin', 'n_archer', 'n_cavalry', 's_lightning', 'f_uplift', ['fi_guard', 1],
     ]) },
     { id: 'fire_scorch', name: '焦土作戦', desc: '溶岩を広げて爆弾魔と不死鳥で焼き尽くす。', cards: build([
       'fi_imp', 'fi_bomber', 's_ignite', 'fi_golem', 'f_firewall', 'f_eruption', 'fi_salamander', 'fi_cannon', 's_frenzy',
@@ -526,7 +526,7 @@ export const PRESETS = {
   azure: [
     { id: 'azure_std', name: '蒼穹の機略', desc: '行のずらしと回転で戦場を組み替える標準型。', cards: build([
       'az_cog', 'az_gunner', 'az_tide', 'az_guardian', 'az_turret', ['az_leviathan', 1],
-      's_freeze', 'f_slide', 'f_rotate', 'f_flood', 'n_squire', 'n_shield', 'n_mage', 's_supply', 'f_uplift', ['az_magnet', 1],
+      's_freeze', 'f_slide', 'f_rotate', 'az_sniper', 'n_squire', 'n_shield', 'n_mage', 's_supply', 'f_uplift', ['az_magnet', 1],
     ]) },
     { id: 'azure_armor', name: '鋼鉄要塞', desc: '鉄壁の機兵で守り、狙撃と巨神で崩す。', cards: build([
       'az_turret', 'az_cog', 'az_engineer', 'az_gunner', 'az_magnet', 'az_guardian', 'az_sniper', ['az_titan', 1],

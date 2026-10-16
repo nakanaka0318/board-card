@@ -9,7 +9,7 @@ import { CARDS, FACTIONS } from './cards.js';
 import {
   W, H, idx, dist, cloneState, applyAction, reachable, targetsFrom, effAtk, effAtkAt, effRangeAt,
   calcDamage, canMove, canAttack, canPlay, canHero, cardTargets, targetsFor, leaderOf, unitAt, tileAt,
-  ignoresLava, isFlying, forecast, coordName, unitById, inEnemyHome,
+  ignoresLava, isFlying, forecast, coordName, unitById, inEnemyHome, COMMAND_POINTS, cpOf,
 } from './rules.js';
 
 export const DIFFICULTY = {
@@ -39,19 +39,24 @@ export function unitValue(u) {
 
 // owner の駒が次のターンに各マスへ与えうる最大の総ダメージ (概算)
 export function threatMap(s, owner) {
+  // 各マスについて「その場から攻撃 (指揮力1)」と「移動して攻撃 (指揮力2)」の候補を集め、
+  // 次のターンの指揮力の範囲で最大になる組み合わせを合計する
   const N = W * H;
-  const map = new Float32Array(N);
-  const mask = new Uint8Array(N);
+  const items = Array.from({ length: N }, () => []);
+  const near = new Uint8Array(N);
+  const far = new Uint8Array(N);
   for (const u of s.units) {
     if (u.owner !== owner || u.hp <= 0 || u.frozen) continue;
-    const a = u.atk;
-    if (a <= 0) continue;
-    mask.fill(0);
-    const origins = [idx(u.x, u.y)];
+    if (u.atk <= 0) continue;
+    near.fill(0);
+    far.fill(0);
+    const here = idx(u.x, u.y);
+    const origins = [here];
     if (u.move > 0) origins.push(...reachable(s, u).tiles);
     for (const o of origins) {
       const ox = o % W, oy = (o / W) | 0;
       const r = effRangeAt(s, u, ox, oy);
+      const mask = o === here ? near : far;
       for (let dy = -r; dy <= r; dy++) {
         const y = oy + dy;
         if (y < 0 || y >= H) continue;
@@ -66,7 +71,24 @@ export function threatMap(s, owner) {
         }
       }
     }
-    for (let i = 0; i < N; i++) if (mask[i]) map[i] += mask[i];
+    for (let i = 0; i < N; i++) {
+      if (near[i]) items[i].push(near[i], 1);
+      if (far[i] > near[i]) items[i].push(far[i], 2);
+    }
+  }
+  const map = new Float32Array(N);
+  const B = COMMAND_POINTS;
+  const best = new Float32Array(B + 1);
+  for (let i = 0; i < N; i++) {
+    const it = items[i];
+    if (!it.length) continue;
+    best.fill(0);
+    // 同じユニットの「その場」と「移動後」は両立しないが、概算として許容する
+    for (let k = 0; k < it.length; k += 2) {
+      const v = it[k], c = it[k + 1];
+      for (let b = B; b >= c; b--) if (best[b - c] + v > best[b]) best[b] = best[b - c] + v;
+    }
+    map[i] = best[B];
   }
   return map;
 }
@@ -223,8 +245,8 @@ export function generateActions(s, p, cfg, opts = {}) {
     if (atk) for (const t of targetsFrom(s, u, u.x, u.y)) acts.push({ type: 'attack', uid: u.uid, target: t.uid });
     if (!mov) continue;
     const r = reachable(s, u);
-    // 移動して攻撃: 対象ごとに最良の立ち位置を 1 つ
-    if (atk) {
+    // 移動して攻撃: 対象ごとに最良の立ち位置を 1 つ (指揮力 2 が必要)
+    if (atk && cpOf(s, p) >= 2) {
       const bestFor = new Map();
       for (const i of r.tiles) {
         const x = i % W, y = (i / W) | 0;

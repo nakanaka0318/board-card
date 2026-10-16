@@ -1,6 +1,6 @@
 // HTML オーバーレイ (パネル・手札・ログ・AI 思考パネルなど)
 import { CARDS, FACTIONS, TERRAIN, typeName } from '../engine/cards.js';
-import { canPlay, canHero, TECTONIC_PERIOD, coordName, has } from '../engine/rules.js';
+import { canPlay, canHero, TECTONIC_PERIOD, coordName, has, COMMAND_POINTS } from '../engine/rules.js';
 import { renderCard, el, keywordHelp, cardBack, factionName } from './cardview.js';
 import { showCardDetail, onLongPress, targetText } from './cardinfo.js';
 import { cardArt } from '../render/cardart.js';
@@ -55,6 +55,9 @@ export class HUD {
       hp.innerHTML = '<div class="pp-hp-ghost"></div><div class="pp-hp-fill"></div><div class="pp-hp-text"></div>';
       panel.appendChild(hp);
       panel.appendChild(el('div', 'pp-mana'));
+      const cp = el('div', 'pp-cp');
+      cp.title = '指揮力: 移動・攻撃で1、移動して攻撃で2消費。毎ターン3に戻る';
+      panel.appendChild(cp);
       const meta = el('div', 'pp-meta');
       meta.innerHTML = `<span>手札 <b class="m-hand">0</b></span><span>山札 <b class="m-deck">0</b></span>`;
       const isHuman = handlers.isHuman(p);
@@ -104,6 +107,17 @@ export class HUD {
     box.appendChild(el('span', 'pp-mana-text', `${mana}/${max}`));
   }
 
+  setCp(p, cp) {
+    const box = $('panel-' + p).querySelector('.pp-cp');
+    if (!box) return;
+    const prev = box.dataset.cp === undefined ? null : +box.dataset.cp;
+    box.dataset.cp = cp;
+    let h = '<span class="cp-label">指揮</span>';
+    for (let i = 0; i < COMMAND_POINTS; i++) h += `<i class="${i < cp ? 'on' : ''}${prev !== null && i >= cp && i < prev ? ' spent' : ''}"></i>`;
+    box.innerHTML = h;
+    box.classList.toggle('empty', cp <= 0);
+  }
+
   refresh(state, ctx) {
     const { humanTurn, selectedHand, heroArmed, aiThinking } = ctx;
     for (let p = 0; p < 2; p++) {
@@ -111,6 +125,7 @@ export class HUD {
       const L = state.units.find((u) => u.uid === pl.leader);
       this.setHp(p, L ? L.hp : 0, L ? L.maxHp : 20);
       this.setMana(p, pl.mana, pl.maxMana);
+      this.setCp(p, pl.cp ?? COMMAND_POINTS);
       const panel = $('panel-' + p);
       panel.querySelector('.m-hand').textContent = pl.hand.length;
       panel.querySelector('.m-deck').textContent = pl.deck.length;

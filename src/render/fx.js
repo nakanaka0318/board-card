@@ -1,6 +1,6 @@
 // エフェクト: パーティクル・浮かぶ数字・飛び道具・稲妻・衝撃波など
 import * as THREE from 'three';
-import { makeGlowTexture, makeRingTexture, textCanvas, canvasTexture } from './textures.js';
+import { makeGlowTexture, makeRingTexture, textCanvas, canvasTexture, makeSummonCircleTexture, makeStarTexture } from './textures.js';
 import { ease } from './tween.js';
 
 const MAX = 5000;
@@ -303,6 +303,139 @@ export class FX {
         group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
       }
     }, ease.linear);
+  }
+
+  // 地面に浮かぶ召喚陣。回りながら広がり、消える
+  summonCircle(pos, color = '#ffffff', radius = 0.55, dur = 1.1) {
+    if (!this.circleTex) this.circleTex = makeSummonCircleTexture();
+    const m = new THREE.MeshBasicMaterial({ map: this.circleTex, color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), m);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.copy(pos);
+    mesh.position.y += 0.03;
+    mesh.renderOrder = 9;
+    this.scene.add(mesh);
+    return this.anim.tween(dur, (k, raw) => {
+      const sc = radius * 2 * (raw < 0.25 ? ease.outBack(raw / 0.25) : 1);
+      mesh.scale.set(sc, sc, 1);
+      mesh.rotation.z = raw * Math.PI * 1.2;
+      m.opacity = raw < 0.7 ? 0.95 : 0.95 * (1 - (raw - 0.7) / 0.3);
+      if (raw >= 1) { this.scene.remove(mesh); mesh.geometry.dispose(); m.dispose(); }
+    }, ease.linear);
+  }
+
+  // 斬撃の軌跡 (三日月形)。dir は攻撃方向 (水平)
+  slash(pos, dir, color = '#ffffff', size = 0.55) {
+    const g = new THREE.RingGeometry(size * 0.72, size, 24, 1, -1.1, 2.2);
+    const m = new THREE.MeshBasicMaterial({ color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(g, m);
+    mesh.position.copy(pos);
+    mesh.lookAt(pos.clone().add(new THREE.Vector3(dir.x, 0, dir.z)));
+    mesh.rotateZ((Math.random() - 0.5) * 1.6);
+    mesh.renderOrder = 12;
+    this.scene.add(mesh);
+    return this.anim.tween(0.32, (k, raw) => {
+      mesh.scale.setScalar(0.6 + k * 0.7);
+      mesh.rotateZ(0.08);
+      m.opacity = 1 - raw;
+      if (raw >= 1) { this.scene.remove(mesh); g.dispose(); m.dispose(); }
+    }, ease.out);
+  }
+
+  // 打撃の閃光
+  impact(pos, color = '#ffffff', size = 0.9) {
+    if (!this.starTex) this.starTex = makeStarTexture();
+    const m = new THREE.SpriteMaterial({ map: this.starTex, color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false });
+    const sp = new THREE.Sprite(m);
+    sp.position.copy(pos);
+    sp.renderOrder = 25;
+    this.scene.add(sp);
+    const rot = Math.random() * Math.PI;
+    return this.anim.tween(0.28, (k, raw) => {
+      const sc = size * (0.3 + ease.out(raw) * 0.9);
+      sp.scale.set(sc, sc, 1);
+      m.rotation = rot + raw * 0.6;
+      m.opacity = 1 - raw * raw;
+      if (raw >= 1) { this.scene.remove(sp); m.dispose(); }
+    }, ease.linear);
+  }
+
+  // 砕け散る破片 (重力と回転つき)
+  shards(pos, colors, count = 14, floorY = pos.y) {
+    const group = [];
+    for (let i = 0; i < count; i++) {
+      const col = colors[i % colors.length];
+      const mesh = new THREE.Mesh(new THREE.TetrahedronGeometry(0.035 + Math.random() * 0.05),
+        new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.35, flatShading: true }));
+      mesh.position.copy(pos).add(new THREE.Vector3((Math.random() - 0.5) * 0.2, Math.random() * 0.4, (Math.random() - 0.5) * 0.2));
+      const a = Math.random() * Math.PI * 2, sp = 1 + Math.random() * 2;
+      mesh.userData.v = new THREE.Vector3(Math.cos(a) * sp, 1.5 + Math.random() * 2.5, Math.sin(a) * sp);
+      mesh.userData.w = new THREE.Vector3(Math.random() * 10, Math.random() * 10, Math.random() * 10);
+      mesh.castShadow = true;
+      this.scene.add(mesh);
+      group.push(mesh);
+    }
+    let last = 0;
+    return this.anim.tween(1.4, (k, raw) => {
+      const dt = Math.max(0, raw * 1.4 - last);
+      last = raw * 1.4;
+      for (const m of group) {
+        const v = m.userData.v;
+        v.y -= 9 * dt;
+        m.position.addScaledVector(v, dt);
+        if (m.position.y < floorY + 0.03) { m.position.y = floorY + 0.03; v.y *= -0.35; v.x *= 0.6; v.z *= 0.6; }
+        m.rotation.x += m.userData.w.x * dt;
+        m.rotation.y += m.userData.w.y * dt;
+        m.scale.setScalar(raw < 0.7 ? 1 : 1 - (raw - 0.7) / 0.3);
+      }
+      if (raw >= 1) for (const m of group) { this.scene.remove(m); m.geometry.dispose(); m.material.dispose(); }
+    }, ease.linear);
+  }
+
+  // 天へ昇る魂
+  soul(pos, color = '#ffffff') {
+    const m = new THREE.SpriteMaterial({ map: this.glowTex, color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+    const sp = new THREE.Sprite(m);
+    sp.position.copy(pos);
+    this.scene.add(sp);
+    const x0 = pos.x, z0 = pos.z;
+    return this.anim.tween(1.6, (k, raw) => {
+      sp.position.set(x0 + Math.sin(raw * 9) * 0.08, pos.y + raw * 1.8, z0 + Math.cos(raw * 7) * 0.06);
+      sp.scale.setScalar(0.45 * (1 - raw * 0.6));
+      m.opacity = raw < 0.2 ? raw / 0.2 : 1 - (raw - 0.2) / 0.8;
+      if (Math.random() < 0.5) this.particles.emit({ pos: sp.position, count: 1, color, speed: [0, 0.1], life: [0.3, 0.5], size: [0.04, 0.07] });
+      if (raw >= 1) { this.scene.remove(sp); m.dispose(); }
+    }, ease.linear);
+  }
+
+  // 伝説級の登場時に立ちのぼる光条
+  rays(pos, color = '#ffd24a', dur = 1.6) {
+    const group = new THREE.Group();
+    group.position.copy(pos);
+    const m = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    for (let i = 0; i < 10; i++) {
+      const g = new THREE.PlaneGeometry(0.12, 3.2);
+      g.translate(0, 1.6, 0);
+      const ray = new THREE.Mesh(g, m);
+      ray.rotation.y = (i / 10) * Math.PI;
+      ray.rotation.z = (Math.random() - 0.5) * 0.5;
+      group.add(ray);
+    }
+    group.renderOrder = 8;
+    this.scene.add(group);
+    return this.anim.tween(dur, (k, raw) => {
+      group.rotation.y = raw * 1.5;
+      group.scale.set(1, Math.min(1, raw * 3), 1);
+      m.opacity = raw < 0.2 ? raw / 0.2 * 0.55 : 0.55 * (1 - (raw - 0.2) / 0.8);
+      if (raw >= 1) { this.scene.remove(group); group.children.forEach((c) => c.geometry.dispose()); m.dispose(); }
+    }, ease.linear);
+  }
+
+  // 勝利の花火
+  firework(pos, color) {
+    const p = pos.clone();
+    this.particles.emit({ pos: p, count: 90, color: '#ffffff', colorEnd: color, speed: [1.5, 3.2], life: [0.8, 1.4], size: [0.06, 0.12], gravity: 1.2, drag: 1.2 });
+    this.flash(p, color, 8, 0.6);
   }
 
   // 一定時間ループするエミッター (溶岩の泡など)

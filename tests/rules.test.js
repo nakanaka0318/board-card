@@ -141,7 +141,7 @@ test('侵攻: 敵陣のユニットがターン開始時に敵の将へダメー
   const foe = leaderOf(s, 1);
   applyAction(s, { type: 'end' }); // 相手のターン
   applyAction(s, { type: 'end' }); // 自分のターン開始で侵攻
-  assert.equal(foe.hp, 18 - 2);
+  assert.equal(foe.hp, 16 - 2);
 });
 
 test('溶岩: ターン終了時に地上ユニットへ2ダメージ (耐火は無効)', () => {
@@ -193,4 +193,25 @@ test('アップデート履歴: 新しい順で、バージョンが package.jso
   const num = (v) => v.split('.').map(Number).reduce((a, b) => a * 1000 + b, 0);
   for (let i = 1; i < CHANGELOG.length; i++) assert.ok(num(CHANGELOG[i - 1].version) > num(CHANGELOG[i].version));
   for (const v of CHANGELOG) for (const it of v.items) assert.ok(['新機能', '改善', '調整', '修正'].includes(it.tag));
+});
+
+test('指揮力: 移動・攻撃は1ターン合計3回、移動して攻撃は2消費、次のターンに回復', () => {
+  const s = blank();
+  const us = [0, 1, 2, 3].map((x) => addUnit(s, 0, 'fi_blade', x, 2));
+  assert.equal(s.players[0].cp, 3);
+  for (let i = 0; i < 3; i++) assert.ok(applyAction(s, { type: 'move', uid: us[i].uid, x: us[i].x, y: 3 }), `move ${i}`);
+  assert.equal(s.players[0].cp, 0);
+  assert.equal(applyAction(s, { type: 'move', uid: us[3].uid, x: 3, y: 3 }), false);
+  applyAction(s, { type: 'end' });
+  applyAction(s, { type: 'end' });
+  assert.equal(s.players[0].cp, 3);
+  // 敵を置き、移動して攻撃 (2消費) → 残り1では移動して攻撃できない
+  const e1 = addUnit(s, 1, 'fi_blade', 0, 5);
+  const e2 = addUnit(s, 1, 'fi_blade', 3, 5);
+  e1.hp = e2.hp = 20; e1.maxHp = e2.maxHp = 20;
+  assert.ok(applyAction(s, { type: 'moveAttack', uid: us[0].uid, x: 0, y: 4, target: e1.uid }));
+  assert.equal(s.players[0].cp, 1);
+  assert.equal(applyAction(s, { type: 'moveAttack', uid: us[3].uid, x: 3, y: 4, target: e2.uid }), false);
+  assert.ok(applyAction(s, { type: 'move', uid: us[3].uid, x: 3, y: 4 }));
+  assert.equal(s.players[0].cp, 0);
 });

@@ -387,3 +387,65 @@ export function canvasTexture(c) {
 export function makeSkyTexture() {
   return null;
 }
+
+// 召喚陣 (外周の文字・六芒星・内円)
+export function makeSummonCircleTexture() {
+  const S = 256;
+  const c = canvas(S, S);
+  const g = c.getContext('2d');
+  g.translate(S / 2, S / 2);
+  g.strokeStyle = '#fff';
+  g.fillStyle = '#fff';
+  g.lineWidth = 4;
+  g.beginPath(); g.arc(0, 0, S * 0.46, 0, Math.PI * 2); g.stroke();
+  g.lineWidth = 2;
+  g.beginPath(); g.arc(0, 0, S * 0.38, 0, Math.PI * 2); g.stroke();
+  g.beginPath(); g.arc(0, 0, S * 0.18, 0, Math.PI * 2); g.stroke();
+  // 六芒星
+  for (const off of [0, Math.PI / 3]) {
+    g.beginPath();
+    for (let i = 0; i <= 3; i++) {
+      const a = off + (i / 3) * Math.PI * 2 - Math.PI / 2;
+      const x = Math.cos(a) * S * 0.38, y = Math.sin(a) * S * 0.38;
+      if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+  // 外周の文字
+  g.font = 'bold 15px serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  const runes = 'ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ';
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
+    g.save();
+    g.rotate(a);
+    g.fillText(runes[i % runes.length], 0, -S * 0.42);
+    g.restore();
+  }
+  return tex(c, false);
+}
+
+// 衝撃の星形 (放射状のとげ)
+export function makeStarTexture() {
+  const S = 128;
+  const c = canvas(S, S);
+  const g = c.getContext('2d');
+  g.translate(S / 2, S / 2);
+  const gr = g.createRadialGradient(0, 0, 0, 0, 0, S / 2);
+  gr.addColorStop(0, 'rgba(255,255,255,1)');
+  gr.addColorStop(0.3, 'rgba(255,255,255,0.6)');
+  gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr;
+  const N = 10;
+  g.beginPath();
+  for (let i = 0; i <= N * 2; i++) {
+    const a = (i / (N * 2)) * Math.PI * 2;
+    const r = i % 2 === 0 ? S * 0.5 : S * 0.12;
+    const x = Math.cos(a) * r, y = Math.sin(a) * r;
+    if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+  }
+  g.closePath();
+  g.fill();
+  return tex(c, false);
+}

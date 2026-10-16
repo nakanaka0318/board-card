@@ -15,6 +15,8 @@ export const TECTONIC_PERIOD = 3;
 export const LAVA_DAMAGE = 2;
 export const SHRINE_HEAL = 2;
 export const SIEGE_DAMAGE = 1;
+// 指揮力: 1 ターンにユニットを動かせる回数。移動 1・攻撃 1 を消費する
+export const COMMAND_POINTS = 3;
 export const inEnemyHome = (p, y) => (p === 0 ? y >= H - 2 : y <= 1);
 
 export const idx = (x, y) => y * W + x;
@@ -50,7 +52,7 @@ export function createGame(opts) {
     const f = factions[p];
     const list = (opts.decks && opts.decks[p]) || DECKS[f];
     const deck = shuffle(s, list.slice());
-    s.players.push({ faction: f, deck, deckList: list.slice(), hand: [], mana: 0, maxMana: 0, heroUsed: false, fatigue: 0, leader: 0 });
+    s.players.push({ faction: f, deck, deckList: list.slice(), hand: [], mana: 0, maxMana: 0, cp: COMMAND_POINTS, heroUsed: false, fatigue: 0, leader: 0 });
     const L = makeUnit(s, p, 'leader_' + f, 3, p === 0 ? 0 : H - 1);
     L.leader = true;
     L.sick = false;
@@ -174,8 +176,9 @@ function canCounter(s, def, ax, ay) {
 export function canAct(s, u) {
   return u.owner === s.current && !u.sick && !u.frozen && s.winner === null;
 }
-export const canMove = (s, u) => canAct(s, u) && !u.moved && !u.attacked;
-export const canAttack = (s, u) => canAct(s, u) && !u.attacked && effAtk(s, u) > 0;
+export const cpOf = (s, p) => s.players[p].cp ?? COMMAND_POINTS;
+export const canMove = (s, u) => canAct(s, u) && !u.moved && !u.attacked && cpOf(s, u.owner) >= 1;
+export const canAttack = (s, u) => canAct(s, u) && !u.attacked && effAtk(s, u) > 0 && cpOf(s, u.owner) >= 1;
 
 // ガード (ZOC) マップ: owner にとって「敵の守護ユニットに隣接」するマス
 function zocMap(s, owner) {
@@ -592,6 +595,7 @@ function startTurn(s) {
   pl.maxMana = Math.min(MAX_MANA, pl.maxMana + 1);
   pl.mana = pl.maxMana;
   pl.heroUsed = false;
+  pl.cp = COMMAND_POINTS;
   emit(s, { type: 'turnStart', player: p, turn: s.turn, round: s.round });
 
   let bonus = 0;
@@ -678,7 +682,14 @@ export function applyAction(s, a) {
     case 'play': ok = doPlay(s, a); break;
     case 'move': ok = doMove(s, a); break;
     case 'attack': ok = doAttack(s, a); break;
-    case 'moveAttack': ok = doMove(s, a) && doAttack(s, a); break;
+    case 'moveAttack': {
+      // 移動して攻撃するには指揮力が 2 必要 (その場で攻撃なら 1)。途中で失敗しないよう先に確認する
+      const u = unitById(s, a.uid);
+      const moving = u && !(u.x === a.x && u.y === a.y);
+      if (!u || cpOf(s, u.owner) < (moving ? 2 : 1)) { ok = false; break; }
+      ok = doMove(s, a) && doAttack(s, a);
+      break;
+    }
     case 'hero': ok = doHero(s, a); break;
     case 'end': endTurn(s); ok = true; break;
   }
@@ -753,7 +764,14 @@ function doMove(s, a) {
   u.x = a.x;
   u.y = a.y;
   u.moved = true;
+  spendCp(s, u.owner);
   return true;
+}
+
+function spendCp(s, p) {
+  const pl = s.players[p];
+  pl.cp = cpOf(s, p) - 1;
+  emit(s, { type: 'cp', player: p, cp: pl.cp });
 }
 
 function doAttack(s, a) {
@@ -766,6 +784,7 @@ function doAttack(s, a) {
   const dmg = calcDamage(s, u, u.x, u.y, t, t.x, t.y);
   u.attacked = true;
   u.moved = true;
+  spendCp(s, p);
   emit(s, { type: 'attack', uid: u.uid, target: t.uid, ranged: d >= 2, fx: CARDS[u.cardId].model });
   damage(s, t, dmg, 'attack', p);
   // 貫通: 後ろの敵にも
@@ -810,7 +829,7 @@ export function hasAnyAction(s, p) {
     if (u.owner !== p || u.hp <= 0) continue;
     if (canAttack(s, u)) {
       if (targetsFrom(s, u, u.x, u.y).length) return true;
-      if (canMove(s, u)) {
+      if (canMove(s, u) && cpOf(s, p) >= 2) {
         const r = reachable(s, u);
         for (const i of r.tiles) if (targetsFrom(s, u, i % W, (i / W) | 0).length) return true;
       }
