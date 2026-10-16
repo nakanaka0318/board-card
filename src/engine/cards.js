@@ -313,8 +313,13 @@ def('f_rotate', {
 });
 def('f_flood', {
   name: '潮流', faction: 'azure', type: 'field', cost: 1, target: 'tile', icon: '🌊', fx: 'flood',
-  text: 'マス1つを水辺に変え、高さ-1。',
-  effect(G, c) { G.setTerrain(c.x, c.y, 'water'); G.changeHeight(c.x, c.y, -1); },
+  text: 'マス1つを水辺に変え、高さ-1。そこにいる敵ユニットを凍結させる。',
+  effect(G, c) {
+    G.setTerrain(c.x, c.y, 'water');
+    G.changeHeight(c.x, c.y, -1);
+    const u = G.unitAt(c.x, c.y);
+    if (u && u.owner !== c.player) G.freeze(u);
+  },
 });
 
 
@@ -359,7 +364,7 @@ def('f_level', {
 
 // ---------------- 紅蓮帝国 ----------------
 def('fi_bomber', {
-  name: '爆弾魔', faction: 'fire', type: 'unit', cost: 2, atk: 1, hp: 1, move: 2, model: 'bomber',
+  name: '爆弾魔', faction: 'fire', type: 'unit', cost: 2, atk: 2, hp: 1, move: 3, keywords: ['haste'], model: 'bomber',
   text: '遺言: 隣接する敵すべてに2ダメージ。',
   onDeath(G, c) {
     G.fx('nova', c.self, null, { radius: 1, color: '#ff6a1a' });
@@ -383,9 +388,9 @@ def('s_ignite', {
   effect(G, c) { const lava = G.s.tiles[c.y * 7 + c.x].terrain === 'lava'; G.damage(c.target, lava ? 3 : 1, 'spell'); },
 });
 def('s_frenzy', {
-  name: '狂乱', faction: 'fire', type: 'spell', cost: 3, target: 'friendlyUnit', icon: '😡', fx: 'warcry',
-  text: '味方ユニット1体の攻撃力+1。行動済みなら、もう一度行動できる。',
-  effect(G, c) { G.buff(c.target, 1, 0); G.refresh(c.target); },
+  name: '狂乱', faction: 'fire', type: 'spell', cost: 2, target: 'friendlyUnit', icon: '😡', fx: 'warcry',
+  text: '味方ユニット1体の攻撃力+2。行動済みなら、もう一度行動できる。指揮力+1。',
+  effect(G, c) { G.buff(c.target, 2, 0); G.refresh(c.target); G.addCp(c.player, 1); },
 });
 def('f_firewall', {
   name: '炎の壁', faction: 'fire', type: 'field', cost: 4, target: 'tile', icon: '🧯', fx: 'eruption',
@@ -412,7 +417,7 @@ def('s_meteor', {
 
 // ---------------- 翠緑の森 ----------------
 def('fo_seedling', {
-  name: '若木', faction: 'forest', type: 'unit', cost: 1, atk: 0, hp: 2, move: 0, model: 'sapling',
+  name: '若木', faction: 'forest', type: 'unit', cost: 1, atk: 0, hp: 3, move: 0, keywords: ['guard'], model: 'sapling',
   text: '動けない。自分のターン開始時: +1/+1 (成長する)。',
   onTurnStart(G, c) { G.buff(c.self, 1, 1); },
 });
@@ -439,13 +444,17 @@ def('s_bloom', {
   effect(G, c) { for (const u of G.friendlyAll(c.player)) G.heal(u, 3); },
 });
 def('f_pillar', {
-  name: '大地の柱', faction: 'forest', type: 'field', cost: 2, target: 'tile', icon: '🗿', fx: 'raise',
-  text: 'マス1つの高さ+2 (最大3)。',
-  effect(G, c) { G.changeHeight(c.x, c.y, 2); },
+  name: '大地の柱', faction: 'forest', type: 'field', cost: 1, target: 'tile', icon: '🗿', fx: 'raise',
+  text: 'マス1つの高さ+2 (最大3) し、森にする。',
+  effect(G, c) { G.changeHeight(c.x, c.y, 2); G.setTerrain(c.x, c.y, 'forest'); },
 });
 
 // ---------------- 蒼穹機関 ----------------
-def('az_drone', { name: '偵察ドローン', faction: 'azure', type: 'unit', cost: 1, atk: 1, hp: 1, move: 4, keywords: ['flying'], model: 'drone', text: '' });
+def('az_drone', {
+  name: '偵察ドローン', faction: 'azure', type: 'unit', cost: 1, atk: 1, hp: 1, move: 4, keywords: ['flying'], model: 'drone',
+  text: '召喚時: カードを1枚引く。',
+  onSummon(G, c) { G.draw(c.player, 1); },
+});
 def('az_engineer', {
   name: '技師', faction: 'azure', type: 'unit', cost: 2, atk: 1, hp: 3, move: 2, model: 'cog',
   text: '召喚時: 自身のマスの高さ+1。',
@@ -552,16 +561,16 @@ def('lb_subject', {
   text: '',
 });
 def('lb_subject_a', {
-  name: '没入の実験体', faction: 'lab', type: 'unit', cost: 0, atk: 2, hp: 2, move: 3, keywords: ['haste'], model: 'subject', subject: true, token: true,
+  name: '没入の実験体', faction: 'lab', type: 'unit', cost: 0, atk: 2, hp: 2, move: 2, keywords: ['haste'], model: 'subject', subject: true, token: true,
   text: '「人らしい愛」で生まれた個体。',
 });
 def('lb_subject_b', {
-  name: '没入の実験体', faction: 'lab', type: 'unit', cost: 3, atk: 3, hp: 3, move: 3, keywords: ['haste'], model: 'subject', subject: true, token: true,
+  name: '没入の実験体', faction: 'lab', type: 'unit', cost: 3, atk: 3, hp: 3, move: 2, keywords: ['haste'], model: 'subject', subject: true, token: true,
   text: '「人らしい愛」で生まれた個体。',
 });
 def('s_lb_love', {
   name: '人らしい愛', faction: 'lab', type: 'spell', cost: 2, target: null, icon: '💗', fx: 'draw',
-  text: '「0/2/2/3/1」になった「没入の実験体」と「3/3/3/3/1」になった「没入の実験体」を1枚ずつ手札に加える。',
+  text: '「0/2/2/2/1」になった「没入の実験体」と「3/3/3/2/1」になった「没入の実験体」を1枚ずつ手札に加える。',
   effect(G, c) { G.addCard(c.player, 'lb_subject_a'); G.addCard(c.player, 'lb_subject_b'); },
 });
 def('lb_devotee', {

@@ -622,6 +622,10 @@ function makeApi(s) {
       u.attacked = false;
       emit(s, { type: 'buff', uid: u.uid, atk: u.atk, hp: u.hp, dAtk: 0, dHp: 0, label: '再行動!' });
     },
+    addCp: (p, n) => {
+      s.players[p].cp = cpOf(s, p) + n;
+      emit(s, { type: 'cp', player: p, cp: s.players[p].cp });
+    },
     addMove: (u, n) => {
       if (u.hp <= 0) return;
       u.move += n;

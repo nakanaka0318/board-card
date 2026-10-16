@@ -1,6 +1,6 @@
 {
   "name": "board-card",
-  "version": "1.9.1",
+  "version": "1.9.2",
   "description": "アルカナ・フィールド — 動く大地の 3D カードバトル (AI 対戦)",
   "type": "module",
   "private": true,

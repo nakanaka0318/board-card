@@ -407,3 +407,28 @@ function summonSpell(s, p, cardId) {
   const h = s.players[p].hand[s.players[p].hand.length - 1];
   assert.ok(applyAction(s, { type: 'play', handUid: h.uid }), 'play ' + cardId);
 }
+
+test('強化: 狂乱は指揮力+1で再行動、潮流は敵を凍結、偵察ドローンは1枚引く', () => {
+  const s = blank();
+  const u = addUnit(s, 0, 'fi_blade', 3, 3);
+  u.attacked = true; u.moved = true;
+  s.players[0].cp = 0;
+  summon2(s, 0, 's_frenzy', 3, 3);
+  assert.equal(s.players[0].cp, 1);
+  assert.equal(u.atk, CARDS.fi_blade.atk + 2);
+  assert.ok(!u.attacked && !u.moved);
+  const e = addUnit(s, 1, 'n_giant', 2, 5);
+  summon2(s, 0, 'f_flood', 2, 5);
+  assert.ok(e.frozen);
+  assert.equal(tileAt(s, 2, 5).terrain, 'water');
+  const n = s.players[0].hand.length;
+  summon2(s, 0, 'az_drone', 0, 1);
+  assert.equal(s.players[0].hand.length, n + 1);
+});
+
+function summon2(s, p, cardId, x, y) {
+  s.players[p].hand.push({ uid: s.nextUid++, cardId });
+  s.players[p].mana = 10;
+  const h = s.players[p].hand[s.players[p].hand.length - 1];
+  assert.ok(applyAction(s, { type: 'play', handUid: h.uid, x, y }), 'play ' + cardId);
+}
