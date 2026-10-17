@@ -746,10 +746,10 @@ def('dr_flameblade', {
   onSummon(G, c) { G.advance(c.self, 3); },
 });
 def('dr_fafnir', {
-  name: 'ファフニール', faction: 'wing', type: 'unit', cost: 9, atk: 9, hp: 9, move: 1, range: 4, keywords: ['flying'], model: 'fafnir',
-  text: '召喚時: カードを2枚引く。自分のターン終了時: 相手の将に2ダメージ。',
+  name: 'ファフニール', faction: 'wing', type: 'unit', cost: 9, atk: 6, hp: 6, move: 1, range: 4, keywords: ['flying'], model: 'fafnir',
+  text: '召喚時: カードを2枚引く。自分のターン終了時: 相手の将に1ダメージ。',
   onSummon(G, c) { G.draw(c.player, 2); },
-  onTurnEnd(G, c) { const L = G.leaderOf(1 - c.player); if (L && L.hp > 0) { G.fx('bolt', c.self, L, {}); G.damage(L, 2, 'spell'); } },
+  onTurnEnd(G, c) { const L = G.leaderOf(1 - c.player); if (L && L.hp > 0) { G.fx('bolt', c.self, L, {}); G.damage(L, 1, 'spell'); } },
 });
 def('s_dr_will', {
   name: '炎の竜の意思', faction: 'wing', type: 'spell', cost: 5, target: null, icon: '🔥', fx: 'crow',

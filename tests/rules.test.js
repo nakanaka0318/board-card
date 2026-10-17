@@ -470,7 +470,7 @@ test('双翼の竜: エンハンス・最大マナ・前進・竜の居る空・
   assert.equal(s.players[0].deck.length, deck0);
 });
 
-test('双翼の竜: 英雄の力は対象なしで2種類を手札に、ファフニールは相手の将に2ダメージ', () => {
+test('双翼の竜: 英雄の力は対象なしで2種類を手札に、ファフニールは相手の将に1ダメージ', () => {
   const s = blank({ factions: ['wing', 'fire'] });
   s.players[0].mana = 5;
   const n = s.players[0].hand.length;
@@ -481,5 +481,5 @@ test('双翼の竜: 英雄の力は対象なしで2種類を手札に、ファ�
   summon(s, 0, 'dr_fafnir', 3, 1);
   const L = leaderOf(s, 1), hp = L.hp;
   applyAction(s, { type: 'end' });
-  assert.equal(L.hp, hp - 2);
+  assert.equal(L.hp, hp - 1);
 });
