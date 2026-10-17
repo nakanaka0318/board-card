@@ -1,6 +1,7 @@
 // HTML のカード要素を生成する
 import { CARDS, FACTIONS, KEYWORDS, keywordList, typeName } from '../engine/cards.js';
 import { cardArt } from '../render/cardart.js';
+import { paintFaction } from './factions.js';
 
 export function el(tag, cls, html) {
   const e = document.createElement(tag);
@@ -15,7 +16,7 @@ export function factionName(f) {
 
 export function renderCard(cardId, opts = {}) {
   const c = CARDS[cardId];
-  const card = el('div', `card f-${c.faction} t-${c.type}`);
+  const card = paintFaction(el('div', `card t-${c.type}`), c.faction);
   card.dataset.cardId = cardId;
   const art = el('div', 'c-art');
   if (c.type === 'unit' || c.type === 'leader') {
@@ -70,7 +71,7 @@ export function keywordHelp(cardId) {
 }
 
 export function cardBack(faction) {
-  const b = el('div', `card-back f-${faction}`);
+  const b = paintFaction(el('div', 'card-back'), faction);
   b.appendChild(el('div', 'cb-emblem', FACTIONS[faction] ? FACTIONS[faction].emblem : '✦'));
   return b;
 }

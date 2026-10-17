@@ -231,7 +231,8 @@ export function generateActions(s, p, cfg, opts = {}) {
   // --- 英雄の力 ---
   if (canHero(s, p)) {
     const h = FACTIONS[pl.faction].hero;
-    let ts = targetsFor(s, p, h.target);
+    if (!h.target) acts.push({ type: 'hero' });
+    let ts = h.target ? targetsFor(s, p, h.target) : [];
     if (h.target === 'friendlyAny' || h.target === 'friendlyUnit') ts = ts.filter((t) => { const u = unitAt(s, t.x, t.y); return u && u.hp < u.maxHp; });
     for (const t of ts) acts.push({ type: 'hero', x: t.x, y: t.y });
   }
@@ -482,7 +483,7 @@ export function describeAction(s, a) {
     }
     case 'hero': {
       const h = FACTIONS[s.players[p].faction].hero;
-      return `英雄の力「${h.name}」 → ${coordName(a.x, a.y)}`;
+      return `英雄の力「${h.name}」${a.x !== undefined ? ` → ${coordName(a.x, a.y)}` : ''}`;
     }
     case 'skill': {
       const u = unitById(s, a.uid);

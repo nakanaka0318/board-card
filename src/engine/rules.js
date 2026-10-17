@@ -46,6 +46,7 @@ export function createGame(opts) {
     events: [],
     sim: false,
     envKind: null,
+    envOwner: null,
     envSeq: 0,
     stats: [newStats(), newStats()],
   };
@@ -91,6 +92,7 @@ export function cloneState(s) {
     events: null,
     sim: true,
     envKind: s.envKind,
+    envOwner: s.envOwner,
     envSeq: s.envSeq,
     stats: [newStats(), newStats()],
   };
@@ -330,10 +332,25 @@ export function cardTargets(s, p, cardId) {
   return targetsFor(s, p, c.target);
 }
 
+// 環境「竜の居る空」: その環境の持ち主の手札のカードは必要マナ-2
+export const DRAGON_DISCOUNT = 2;
+export function costOf(s, p, cardId) {
+  const c = CARDS[cardId];
+  if (!c) return 0;
+  let cost = c.cost;
+  if (s.envKind === 'dragonsky' && s.envOwner === p) cost -= DRAGON_DISCOUNT;
+  return Math.max(0, cost);
+}
+// エンハンス: 指定マナ以上あるときに使うと、そのマナを払って追加効果が発動する
+export function isEnhanced(s, p, cardId) {
+  const c = CARDS[cardId];
+  return !!(c && c.enhance && s.players[p].mana >= c.enhance.cost && c.enhance.cost > costOf(s, p, cardId));
+}
+export const playCost = (s, p, cardId) => (isEnhanced(s, p, cardId) ? CARDS[cardId].enhance.cost : costOf(s, p, cardId));
+
 export function canPlay(s, p, handCard) {
   if (s.winner !== null || s.current !== p || !handCard.cardId) return false;
-  const c = CARDS[handCard.cardId];
-  if (c.cost > s.players[p].mana) return false;
+  if (costOf(s, p, handCard.cardId) > s.players[p].mana) return false;
   const t = cardTargets(s, p, handCard.cardId);
   return t === null || t.length > 0;
 }
@@ -341,7 +358,7 @@ export function canPlay(s, p, handCard) {
 export function canHero(s, p) {
   const pl = s.players[p];
   const h = FACTIONS[pl.faction].hero;
-  return s.winner === null && s.current === p && !pl.heroUsed && pl.mana >= h.cost && targetsFor(s, p, h.target).length > 0;
+  return s.winner === null && s.current === p && !pl.heroUsed && pl.mana >= h.cost && (!h.target || targetsFor(s, p, h.target).length > 0);
 }
 
 // ------------------------------------------------------------------
@@ -577,9 +594,10 @@ function syncEnv(s) {
   let best = null;
   for (const u of s.units) if (u.hp > 0 && u.envSeq && (!best || u.envSeq > best.envSeq)) best = u;
   const kind = best ? CARDS[best.cardId].env : null;
-  if (kind === s.envKind) return;
+  if (kind === s.envKind) { s.envOwner = best ? best.owner : null; return; }
   const prev = s.envKind;
   s.envKind = kind;
+  s.envOwner = best ? best.owner : null;
   emit(s, { type: 'env', kind, prev, uid: best ? best.uid : null, owner: best ? best.owner : null });
 }
 
@@ -621,6 +639,50 @@ function makeApi(s) {
       u.moved = false;
       u.attacked = false;
       emit(s, { type: 'buff', uid: u.uid, atk: u.atk, hp: u.hp, dAtk: 0, dHp: 0, label: '再行動!' });
+    },
+    // 最大マナを増やす (上限 MAX_MANA)。今のマナは増えない
+    addMaxMana: (p, n) => {
+      const pl = s.players[p];
+      const before = pl.maxMana;
+      pl.maxMana = Math.min(MAX_MANA, pl.maxMana + n);
+      emit(s, { type: 'mana', player: p, mana: pl.mana, maxMana: pl.maxMana, label: pl.maxMana > before ? '最大マナ+' + (pl.maxMana - before) : null });
+    },
+    // 前方 (相手陣地の方向) へ最大 n マス進む。ユニットか盤端で止まる
+    advance: (u, n) => {
+      if (u.hp <= 0) return 0;
+      const dy = u.owner === 0 ? 1 : -1;
+      const path = [];
+      let y = u.y;
+      for (let i = 0; i < n; i++) {
+        const ny = y + dy;
+        if (!inBounds(u.x, ny) || unitAt(s, u.x, ny)) break;
+        y = ny;
+        path.push({ x: u.x, y, tileId: tileAt(s, u.x, y).id });
+      }
+      if (!path.length) return 0;
+      emit(s, { type: 'move', uid: u.uid, path, charge: true });
+      u.y = y;
+      return path.length;
+    },
+    // 召喚酔いを解く (突撃を得る)
+    wake: (u) => {
+      if (u.hp <= 0 || !u.sick) return;
+      u.sick = false;
+      emit(s, { type: 'buff', uid: u.uid, atk: u.atk, hp: u.hp, dAtk: 0, dHp: 0, label: '突撃!' });
+    },
+    // 手札のカードを山札のランダムな位置に戻す
+    handToDeck: (p, uids) => {
+      const pl = s.players[p];
+      let n = 0;
+      for (const uid of uids) {
+        const i = pl.hand.findIndex((h) => h.uid === uid);
+        if (i < 0) continue;
+        const [h] = pl.hand.splice(i, 1);
+        pl.deck.splice(randInt(s, pl.deck.length + 1), 0, h.cardId);
+        n++;
+      }
+      if (n) emit(s, { type: 'toDeck', player: p, count: n });
+      return n;
     },
     addCp: (p, n) => {
       s.players[p].cp = cpOf(s, p) + n;
@@ -804,10 +866,11 @@ function doPlay(s, a) {
   const targets = cardTargets(s, p, hc.cardId);
   if (targets && !targets.some((t) => t.x === a.x && t.y === a.y)) return false;
   if (c.dir && a.dir !== 1 && a.dir !== -1) return false;
-  pl.mana -= c.cost;
+  const enhanced = isEnhanced(s, p, hc.cardId);
+  pl.mana -= playCost(s, p, hc.cardId);
   pl.hand.splice(hi, 1);
   s.stats[p].cards++;
-  emit(s, { type: 'play', player: p, cardId: hc.cardId, handUid: hc.uid, x: a.x, y: a.y, dir: a.dir, mana: pl.mana });
+  emit(s, { type: 'play', player: p, cardId: hc.cardId, handUid: hc.uid, x: a.x, y: a.y, dir: a.dir, mana: pl.mana, enhanced });
   const G = makeApi(s);
   if (c.type === 'unit') {
     const u = makeUnit(s, p, hc.cardId, a.x, a.y);
@@ -815,12 +878,14 @@ function doPlay(s, a) {
     s.units.push(u);
     s.stats[p].summons++;
     emit(s, { type: 'summon', unit: snapshotUnit(u), tileId: tileAt(s, a.x, a.y).id });
-    if (c.onSummon) c.onSummon(G, { self: u, player: p });
+    if (c.onSummon) c.onSummon(G, { self: u, player: p, pick: a.pick });
+    if (enhanced) { emit(s, { type: 'enhance', uid: u.uid, cardId: hc.cardId, player: p }); c.enhance.effect(G, { self: u, player: p }); }
   } else {
     if (c.type === 'field') s.stats[p].fields++;
     const target = targets ? unitAt(s, a.x, a.y) : null;
     emit(s, { type: 'spell', player: p, cardId: hc.cardId, fx: c.fx, x: a.x, y: a.y, dir: a.dir, from: leaderPos(s, p) });
-    c.effect(G, { player: p, x: a.x, y: a.y, dir: a.dir, target });
+    if (enhanced) emit(s, { type: 'enhance', cardId: hc.cardId, player: p });
+    c.effect(G, { player: p, x: a.x, y: a.y, dir: a.dir, target, enhanced });
   }
   cleanupDead(s);
   return true;
@@ -836,11 +901,10 @@ function doHero(s, a) {
   const pl = s.players[p];
   if (!canHero(s, p)) return false;
   const h = FACTIONS[pl.faction].hero;
-  const targets = targetsFor(s, p, h.target);
-  if (!targets.some((t) => t.x === a.x && t.y === a.y)) return false;
+  if (h.target && !targetsFor(s, p, h.target).some((t) => t.x === a.x && t.y === a.y)) return false;
   pl.mana -= h.cost;
   pl.heroUsed = true;
-  const target = unitAt(s, a.x, a.y);
+  const target = h.target ? unitAt(s, a.x, a.y) : null;
   emit(s, { type: 'hero', player: p, fx: h.fx, x: a.x, y: a.y, from: leaderPos(s, p), mana: pl.mana });
   h.effect(makeApi(s), { player: p, x: a.x, y: a.y, target });
   cleanupDead(s);

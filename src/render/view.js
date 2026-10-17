@@ -1172,6 +1172,32 @@ export class BoardView {
       case 'skill':
         await this.playSkill(e, sfx);
         break;
+      case 'enhance': {
+        // エンハンス: 金色の衝撃波と文字
+        const uv = e.uid && this.units.get(e.uid);
+        const L = [...this.units.values()].find((u) => u.leader && u.owner === e.player);
+        const at = uv || L;
+        if (!at) break;
+        const p = at.group.position.clone();
+        sfx('buff');
+        this.fx.ring(p, '#ffd24a', 1.6, 0.7);
+        this.fx.pillar(p, '#ffcf6a', 3.5, 0.8, 0.42);
+        this.fx.burst(p.clone().add(new THREE.Vector3(0, 0.3, 0)), { count: 60, color: '#fff6c8', colorEnd: '#ffb02a', speed: [0.6, 2], up: 1.4, life: [0.5, 1], size: [0.06, 0.12], drag: 1 });
+        this.fx.floatText(p.clone().add(new THREE.Vector3(0, 1.3, 0)), 'エンハンス!', '#ffd24a', 0.55, 1.3);
+        await A.wait(0.45);
+        break;
+      }
+      case 'mana': {
+        if (!e.label) break;
+        const L = [...this.units.values()].find((u) => u.leader && u.owner === e.player);
+        if (!L) break;
+        sfx('mana');
+        const p = L.group.position.clone();
+        this.fx.burst(p.clone().add(new THREE.Vector3(0, 0.4, 0)), { count: 40, color: '#e0f4ff', colorEnd: '#4a8aff', speed: [0.3, 1.2], up: 1.6, life: [0.6, 1], size: [0.06, 0.12], drag: 1 });
+        this.fx.floatText(p.clone().add(new THREE.Vector3(0, 1.4, 0)), e.label, '#9fd8ff', 0.5, 1.3);
+        await A.wait(0.35);
+        break;
+      }
       case 'fieldChange':
         await this.animateFieldChange(e, sfx);
         break;
@@ -1179,7 +1205,7 @@ export class BoardView {
         // 空模様が切り替わる。環境ユニットから天へ光の柱
         sfx('env');
         const uv = e.uid && this.units.get(e.uid);
-        const col = { scorch: '#ff7a2a', rain: '#7dffb0', zerog: '#9fb8ff', lab: '#c9a6ff' }[e.kind] || '#d8ccff';
+        const col = { scorch: '#ff7a2a', rain: '#7dffb0', zerog: '#9fb8ff', lab: '#c9a6ff', dragonsky: '#ffd27a' }[e.kind] || '#d8ccff';
         if (uv) {
           const p = uv.group.position.clone();
           this.fx.pillar(p, col, 14, 1.6, 0.45);

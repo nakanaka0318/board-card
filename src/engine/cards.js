@@ -38,6 +38,7 @@ export const ENVIRONMENTS = {
   rain: { name: '恵みの霧雨', icon: '🌧', text: 'ターン開始時、手番のプレイヤーのユニット (将を除く) すべてのHPを1回復。' },
   zerog: { name: '無重力の星海', icon: '🌌', text: '全ユニットの移動力+1 (移動力0を除く)。段差2以上の崖も登れる。' },
   lab: { name: '研究室', icon: '🧪', text: '「没入の実験体」すべて+2/+2。' },
+  dragonsky: { name: '竜の居る空', icon: '🐉', text: 'この環境を出したプレイヤーの手札のカードは必要マナ-2。' },
 };
 
 export const FACTIONS = {
@@ -106,6 +107,25 @@ export const FACTIONS = {
       text: '「没入の実験体」を1体出す (自陣か将の周囲の空きマス)。',
       fx: 'mana',
       effect(G, c) { G.spawn(c.player, 'lb_subject', c.x, c.y); },
+    },
+  },
+  wing: {
+    name: '双翼の竜',
+    short: '双翼',
+    color: '#ffcf6a',
+    desc: '白銀と黄金の双翼に率いられた竜の一族。低コストのエンハンスで場をつなぎ、最大マナを伸ばして巨竜を呼ぶ。',
+    emblem: '🐉',
+    palette: { main: '#b8923a', accent: '#eef2fa', dark: '#4a3a24', skin: '#ecc8a4' },
+    hero: {
+      name: '竜の喧伝',
+      cost: 2,
+      target: null,
+      text: '手札に「喧伝の龍人」「仔竜の斥候」「鱗の盾兵」「竜の咆哮」のうちランダムな2種類を1枚ずつ加える。',
+      fx: 'draw',
+      effect(G, c) {
+        const pool = ['dr_herald', 'dr_whelp', 'dr_scaleguard', 's_dr_roar'];
+        for (let i = 0; i < 2; i++) G.addCard(c.player, pool.splice(Math.floor(G.rand() * pool.length), 1)[0]);
+      },
     },
   },
 };
@@ -708,6 +728,166 @@ def('s_lb_thunder', {
   },
 });
 
+// ---------------- 双翼の竜 ----------------
+// enhance: { cost, effect } — その必要マナ以上を持っているとき、そのマナを払って追加効果
+def('dr_herald', {
+  name: '喧伝の龍人', faction: 'wing', type: 'unit', cost: 2, atk: 2, hp: 1, move: 3, keywords: ['haste'], model: 'dragonkin',
+  text: 'エンハンス4: 左右に「喧伝の龍人」を1体ずつ出す。',
+  enhance: { cost: 4, effect(G, c) { G.spawn(c.player, 'dr_herald', c.self.x - 1, c.self.y); G.spawn(c.player, 'dr_herald', c.self.x + 1, c.self.y); } },
+});
+def('s_dr_revelation', {
+  name: '龍の啓示', faction: 'wing', type: 'spell', cost: 3, target: null, icon: '📜', fx: 'mana',
+  text: '最大マナ+1。',
+  effect(G, c) { G.addMaxMana(c.player, 1); },
+});
+def('dr_flameblade', {
+  name: '焔の突撃剣士', faction: 'wing', type: 'unit', cost: 5, atk: 8, hp: 5, move: 2, model: 'flameblade',
+  text: '召喚時: 前に3マス進む (ユニットか盤の端で止まる)。',
+  onSummon(G, c) { G.advance(c.self, 3); },
+});
+def('dr_fafnir', {
+  name: 'ファフニール', faction: 'wing', type: 'unit', cost: 9, atk: 9, hp: 9, move: 1, range: 4, keywords: ['flying'], model: 'fafnir',
+  text: '召喚時: カードを2枚引く。自分のターン終了時: 相手の将に2ダメージ。',
+  onSummon(G, c) { G.draw(c.player, 2); },
+  onTurnEnd(G, c) { const L = G.leaderOf(1 - c.player); if (L && L.hp > 0) { G.fx('bolt', c.self, L, {}); G.damage(L, 2, 'spell'); } },
+});
+def('s_dr_will', {
+  name: '炎の竜の意思', faction: 'wing', type: 'spell', cost: 5, target: null, icon: '🔥', fx: 'crow',
+  text: '相手のユニットからランダムに2体を選び、3ダメージ。最大マナ+1。',
+  effect(G, c) {
+    const pool = G.enemyUnits(c.player);
+    for (let i = 0; i < 2 && pool.length; i++) {
+      const u = pool.splice(Math.floor(G.rand() * pool.length), 1)[0];
+      G.fx('bolt', G.leaderOf(c.player), u, {});
+      G.damage(u, 3, 'spell');
+    }
+    G.addMaxMana(c.player, 1);
+  },
+});
+def('dr_argente', {
+  name: '白銀の片翼・アルジャンテ', faction: 'wing', type: 'unit', cost: 10, atk: 10, hp: 10, move: 3, range: 3, model: 'argente', legend: true, env: 'dragonsky',
+  text: '環境「竜の居る空」: 場にいる間、自分の手札のカードの必要マナ-2。自分のターン終了時: カードを2枚引く。',
+  onTurnEnd(G, c) { G.draw(c.player, 2); },
+});
+def('dr_lumiore', {
+  name: '黄金の片翼・リュミオール', faction: 'wing', type: 'unit', cost: 7, atk: 4, hp: 6, move: 5, keywords: ['flying'], model: 'lumiore', legend: true, pickHand: 2,
+  text: '召喚時: 自分の手札のカードを2枚選んで山札に戻し、カードを2枚引く。自分のターン終了時: 相手のユニット (将を含む) すべてに1ダメージ。',
+  onSummon(G, c) {
+    const hand = G.s.players[c.player].hand;
+    let pick = (c.pick || []).filter((uid) => hand.some((h) => h.uid === uid)).slice(0, 2);
+    // 選ばれていなければ (AI など) 必要マナの高い順に戻す
+    if (pick.length < Math.min(2, hand.length)) {
+      pick = hand.slice().sort((a, b) => (a.cardId ? C[a.cardId].cost : 3) - (b.cardId ? C[b.cardId].cost : 3)).slice(-2).map((h) => h.uid);
+    }
+    G.handToDeck(c.player, pick);
+    G.draw(c.player, 2);
+  },
+  onTurnEnd(G, c) {
+    G.fx('nova', c.self, null, { radius: 6, color: '#ffd24a' });
+    for (const u of G.enemyAll(c.player)) G.damage(u, 1, 'spell');
+  },
+});
+// 追加カード
+def('dr_whelp', {
+  name: '仔竜の斥候', faction: 'wing', type: 'unit', cost: 2, atk: 2, hp: 2, move: 3, keywords: ['flying'], model: 'whelp',
+  text: 'エンハンス5: +2/+2 し、突撃を得る。',
+  enhance: { cost: 5, effect(G, c) { G.buff(c.self, 2, 2); G.wake(c.self); } },
+});
+def('dr_scaleguard', {
+  name: '鱗の盾兵', faction: 'wing', type: 'unit', cost: 2, atk: 1, hp: 4, move: 2, keywords: ['guard'], model: 'scaleguard',
+  text: 'エンハンス5: +2/+3。',
+  enhance: { cost: 5, effect(G, c) { G.buff(c.self, 2, 3); } },
+});
+def('dr_rider', {
+  name: '竜騎兵', faction: 'wing', type: 'unit', cost: 3, atk: 3, hp: 3, move: 3, model: 'dragonrider',
+  text: 'エンハンス6: +3/+3 し、カードを1枚引く。',
+  enhance: { cost: 6, effect(G, c) { G.buff(c.self, 3, 3); G.draw(c.player, 1); } },
+});
+def('dr_priestess', {
+  name: '竜の巫女', faction: 'wing', type: 'unit', cost: 4, atk: 2, hp: 4, move: 2, range: 2, model: 'dragonmaiden',
+  text: '召喚時: カードを1枚引く。エンハンス7: さらにカードを2枚引く。',
+  onSummon(G, c) { G.draw(c.player, 1); },
+  enhance: { cost: 7, effect(G, c) { G.draw(c.player, 2); } },
+});
+def('dr_wyvern', {
+  name: '炎鱗の飛竜', faction: 'wing', type: 'unit', cost: 6, atk: 6, hp: 5, move: 3, keywords: ['flying'], model: 'wyvern',
+  text: '召喚時: 最も近い敵ユニットに3ダメージ。',
+  onSummon(G, c) {
+    const es = G.enemyUnits(c.player).sort((a, b) => (Math.abs(a.x - c.self.x) + Math.abs(a.y - c.self.y)) - (Math.abs(b.x - c.self.x) + Math.abs(b.y - c.self.y)));
+    if (es[0]) { G.fx('bolt', c.self, es[0], {}); G.damage(es[0], 3, 'spell'); }
+  },
+});
+def('dr_elder', {
+  name: '古竜バハル', faction: 'wing', type: 'unit', cost: 8, atk: 8, hp: 8, move: 2, keywords: ['guard'], model: 'elderdragon',
+  text: '召喚時: 敵ユニットすべてに2ダメージ。',
+  onSummon(G, c) { G.fx('nova', c.self, null, { radius: 6, color: '#ff8a3a' }); for (const u of G.enemyUnits(c.player)) G.damage(u, 2, 'spell'); },
+});
+def('s_dr_roar', {
+  name: '竜の咆哮', faction: 'wing', type: 'spell', cost: 1, target: 'enemyUnit', icon: '🐲', fx: 'spark',
+  text: '敵ユニット1体に2ダメージ。エンハンス6: 代わりに敵ユニットすべてに2ダメージ。',
+  enhance: { cost: 6 },
+  effect(G, c) {
+    if (c.enhanced) { G.fx('nova', G.leaderOf(c.player), null, { radius: 6, color: '#ffcf6a' }); for (const u of G.enemyUnits(c.player)) G.damage(u, 2, 'spell'); }
+    else G.damage(c.target, 2, 'spell');
+  },
+});
+def('s_dr_scale', {
+  name: '竜鱗の加護', faction: 'wing', type: 'spell', cost: 2, target: 'friendlyUnit', icon: '🛡', fx: 'buff',
+  text: '味方ユニット1体に+2/+2。エンハンス5: さらに味方ユニットすべてに+1/+1。',
+  enhance: { cost: 5 },
+  effect(G, c) {
+    G.buff(c.target, 2, 2);
+    if (c.enhanced) for (const u of G.friendlyUnits(c.player)) G.buff(u, 1, 1);
+  },
+});
+def('f_dr_nest', {
+  name: '竜の巣', faction: 'wing', type: 'field', cost: 2, target: 'tile', icon: '🪺', fx: 'raise',
+  text: 'マス1つの高さ+2 (最大3) し、平原にする。そこにいる味方ユニットの攻撃力+1。',
+  effect(G, c) {
+    G.changeHeight(c.x, c.y, 2);
+    G.setTerrain(c.x, c.y, 'plain');
+    const u = G.unitAt(c.x, c.y);
+    if (u && u.owner === c.player) G.buff(u, 1, 0);
+  },
+});
+def('f_dr_breath', {
+  name: '焦がす吐息', faction: 'wing', type: 'field', cost: 3, target: 'row', icon: '💨', fx: 'eruption',
+  text: '行1つの森をすべて溶岩に変え、その行の敵ユニットに1ダメージ。',
+  effect(G, c) {
+    for (let x = 0; x < 7; x++) {
+      if (G.s.tiles[c.y * 7 + x].terrain === 'forest') G.setTerrain(x, c.y, 'lava');
+      const u = G.unitAt(x, c.y);
+      if (u && u.owner !== c.player && !u.leader) G.damage(u, 1, 'spell');
+    }
+  },
+});
+def('dr_zelva', {
+  name: '双頭竜ゼルヴァ', faction: 'wing', type: 'unit', cost: 9, atk: 7, hp: 8, move: 3, keywords: ['flying'], model: 'twinhead', legend: true,
+  text: '召喚時: 敵ユニットからランダムに2体を選び、4ダメージ。',
+  onSummon(G, c) {
+    const pool = G.enemyUnits(c.player);
+    for (let i = 0; i < 2 && pool.length; i++) {
+      const u = pool.splice(Math.floor(G.rand() * pool.length), 1)[0];
+      G.fx('bolt', c.self, u, {});
+      G.damage(u, 4, 'spell');
+    }
+  },
+});
+def('dr_gran', {
+  name: '竜騎士長グラン', faction: 'wing', type: 'unit', cost: 4, atk: 4, hp: 4, move: 3, model: 'dragonknight', legend: true,
+  text: 'エンハンス8: +4/+4 し、突撃を得る。敵ユニットすべてに1ダメージ。',
+  enhance: { cost: 8, effect(G, c) { G.buff(c.self, 4, 4); G.wake(c.self); G.fx('nova', c.self, null, { radius: 6, color: '#ffd24a' }); for (const u of G.enemyUnits(c.player)) G.damage(u, 1, 'spell'); } },
+});
+def('s_dr_dusk', {
+  name: '竜の黄昏', faction: 'wing', type: 'spell', cost: 8, target: null, icon: '🌅', fx: 'crow', legend: true,
+  text: '敵ユニットすべてに4ダメージ。自分の将のHPを4回復。',
+  effect(G, c) {
+    G.fx('nova', G.leaderOf(c.player), null, { radius: 7, color: '#ff9a3a' });
+    for (const u of G.enemyUnits(c.player)) G.damage(u, 4, 'spell');
+    G.heal(G.leaderOf(c.player), 4);
+  },
+});
+
 export const CARDS = C;
 
 // ---------------- デッキ構築ルール ----------------
@@ -788,11 +968,23 @@ PRESETS.lab = [
   ]) },
 ];
 
+PRESETS.wing = [
+  { id: 'wing_std', name: '双翼の竜宴', desc: '最大マナを伸ばし、ファフニールと双翼の片翼たちを呼び出すランプ型。', cards: build([
+    'dr_herald', 'dr_whelp', 'dr_scaleguard', 's_dr_revelation', 's_dr_roar', 'dr_rider', 'dr_priestess', 's_dr_will',
+    'dr_flameblade', 'dr_wyvern', 'dr_fafnir', 'dr_elder', ['dr_argente', 1], ['dr_lumiore', 1], ['s_dr_dusk', 1], ['dr_zelva', 1], 'n_spear',
+  ]) },
+  { id: 'wing_enh', name: 'エンハンス竜騎', desc: '低コストのエンハンスを伸ばしたマナで強化して押し込む。', cards: build([
+    'dr_herald', 'dr_whelp', 'dr_scaleguard', 'dr_rider', 'dr_priestess', 's_dr_scale', 's_dr_roar', 'f_dr_nest', 'f_dr_breath',
+    's_dr_revelation', ['dr_gran', 1], 'dr_flameblade', 'dr_wyvern', 'n_archer', 'n_cavalry', ['dr_lumiore', 1],
+  ]) },
+];
+
 export const DECKS = {
   fire: PRESETS.fire[0].cards,
   forest: PRESETS.forest[0].cards,
   azure: PRESETS.azure[0].cards,
   lab: PRESETS.lab[0].cards,
+  wing: PRESETS.wing[0].cards,
 };
 
 export function keywordList(card) {

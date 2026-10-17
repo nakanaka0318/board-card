@@ -1,6 +1,6 @@
 // HTML オーバーレイ (パネル・手札・ログ・AI 思考パネルなど)
 import { CARDS, FACTIONS, TERRAIN, ENVIRONMENTS, typeName } from '../engine/cards.js';
-import { canPlay, canHero, TECTONIC_PERIOD, coordName, has, COMMAND_POINTS } from '../engine/rules.js';
+import { canPlay, canHero, TECTONIC_PERIOD, coordName, has, COMMAND_POINTS, costOf, isEnhanced } from '../engine/rules.js';
 import { renderCard, el, keywordHelp, cardBack, factionName } from './cardview.js';
 import { showCardDetail, onLongPress, targetText } from './cardinfo.js';
 import { cardArt } from '../render/cardart.js';
@@ -229,6 +229,13 @@ export class HUD {
       c.dataset.n = n;
       c.dataset.spacing = spacing;
       const playable = humanTurn && canPlay(state, p, h);
+      // 実際の必要マナ (環境による軽減) とエンハンスの表示
+      const base = CARDS[h.cardId].cost, cost = costOf(state, p, h.cardId);
+      const costEl = c.querySelector('.c-cost');
+      const enh = state.current === p && isEnhanced(state, p, h.cardId);
+      costEl.textContent = enh ? CARDS[h.cardId].enhance.cost : cost;
+      costEl.classList.toggle('reduced', cost < base && !enh);
+      c.classList.toggle('enhanced', enh);
       c.classList.toggle('playable', playable);
       c.classList.toggle('unplayable', !playable);
       c.classList.toggle('selected', selectedHand === h.uid);
@@ -537,6 +544,41 @@ export class HUD {
     label.style.animationDuration = dur + 'ms';
     setTimeout(() => { if (box.contains(c)) box.innerHTML = ''; }, dur + 50);
     return new Promise((r) => setTimeout(r, dur * 0.55));
+  }
+
+  // 手札から n 枚を選ばせる。選んだ uid の配列 (キャンセルなら null) を返す
+  pickHandCards(cards, n, title) {
+    const box = $('hand-pick');
+    box.innerHTML = '';
+    box.appendChild(el('h4', '', title));
+    const row = el('div', 'hp-row');
+    box.appendChild(row);
+    const chosen = new Set();
+    const ok = el('button', 'hp-ok', `決定 (0/${n})`);
+    ok.disabled = true;
+    for (const h of cards) {
+      const c = renderCard(h.cardId);
+      c.classList.add('hp-card');
+      c.onclick = () => {
+        if (chosen.has(h.uid)) chosen.delete(h.uid);
+        else if (chosen.size < n) chosen.add(h.uid);
+        c.classList.toggle('picked', chosen.has(h.uid));
+        ok.textContent = `決定 (${chosen.size}/${n})`;
+        ok.disabled = chosen.size !== n;
+      };
+      row.appendChild(c);
+    }
+    const btns = el('div', 'hp-btns');
+    const cancel = el('button', 'hp-cancel', 'キャンセル');
+    btns.appendChild(ok);
+    btns.appendChild(cancel);
+    box.appendChild(btns);
+    box.classList.remove('hidden');
+    return new Promise((resolve) => {
+      const done = (v) => { box.classList.add('hidden'); box.innerHTML = ''; resolve(v); };
+      ok.onclick = () => done([...chosen]);
+      cancel.onclick = () => done(null);
+    });
   }
 
   pickDirection(kind) {

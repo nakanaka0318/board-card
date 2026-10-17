@@ -1283,6 +1283,210 @@ Object.assign(BUILDERS, {
   },
 });
 
+// ---------------- 双翼の竜 ----------------
+// 竜の模型の色を塗り替える
+function recolorDragon(g, { scale, wing, belly, glowWing = 0 }) {
+  g.traverse((o) => {
+    if (!o.isMesh || !o.material || !o.material.color) return;
+    const hex = o.material.color.getHexString();
+    if (hex === 'a8221a') o.material = mat(scale, { roughness: 0.45, metalness: 0.2 });
+    else if (hex === '6a1410') o.material = mat(wing, glowWing ? { emissive: wing, emissiveIntensity: glowWing, side: THREE.DoubleSide } : { side: THREE.DoubleSide });
+    else if (hex === 'f0a050') o.material = mat(belly);
+  });
+  return g;
+}
+// 片翼 (人型の背中に付ける大きな翼)
+function wing(parent, color, side, size = 1, glowI = 0.6) {
+  const p = pivot(parent, side * 0.06, 0.38, -0.06);
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0);
+  shape.lineTo(0.42, 0.28);
+  shape.lineTo(0.5, 0.1);
+  shape.lineTo(0.4, 0.02);
+  shape.lineTo(0.44, -0.08);
+  shape.lineTo(0.3, -0.06);
+  shape.lineTo(0.32, -0.16);
+  shape.lineTo(0.16, -0.1);
+  shape.lineTo(0.0, -0.06);
+  const g = geo('featherwing', () => new THREE.ShapeGeometry(shape));
+  const m = part(g, mat(color, { emissive: color, emissiveIntensity: glowI, side: THREE.DoubleSide, metalness: 0.5, roughness: 0.3 }), 0, 0, 0, p);
+  m.scale.set(side * size, size, size);
+  p.rotation.y = side * -0.5;
+  return p;
+}
+
+Object.assign(BUILDERS, {
+  // 喧伝の龍人: 角と尾、小さな翼を持つ竜の戦士
+  dragonkin(card, P) {
+    const r = humanoid({ body: '#8a2a1a', armor: '#c89a3a', skin: '#c86a4a', legs: '#4a2a1a', head: 'horns', headColor: '#a8321a' });
+    sword(r.handR, '#e8d8c8', 0.22).rotation.x = Math.PI / 2.2;
+    const tail = pivot(r.g, 0, 0.2, -0.06);
+    for (let i = 0; i < 4; i++) part(G.sph(0.03 - i * 0.005, 6, 4), mat('#a8321a'), 0, -i * 0.02, -i * 0.05, tail).scale.z = 1.6;
+    const wl = wing(r.g, '#c8402a', -1, 0.45, 0.2), wr = wing(r.g, '#c8402a', 1, 0.45, 0.2);
+    r.root.userData.anim = (t) => { humanoidIdle(r, 0.8)(t); tail.rotation.y = Math.sin(t * 3) * 0.4; wl.rotation.y = 0.5 + Math.sin(t * 4) * 0.15; wr.rotation.y = -0.5 - Math.sin(t * 4) * 0.15; };
+    return r.root;
+  },
+  // 焔の突撃剣士: 炎をまとう大剣を構える
+  flameblade(card, P) {
+    const r = humanoid({ body: '#5a2a1a', armor: '#d86a2a', skin: P.skin, head: 'greathelm', headColor: '#c8642a', bulky: 1.15 });
+    const blade = new THREE.Group();
+    part(G.box(0.04, 0.42, 0.014), glow('#ff8a2a', 1.6), 0, 0.25, 0, blade);
+    part(G.box(0.12, 0.025, 0.03), metal('#c9a64a'), 0, 0.04, 0, blade);
+    r.handR.add(blade);
+    blade.rotation.x = Math.PI / 2.4;
+    const flames = [];
+    for (let i = 0; i < 5; i++) flames.push(part(G.cone(0.025, 0.08, 5), glow('#ffcf3a', 2.6), 0, 0.1 + i * 0.08, 0.02, blade));
+    r.root.userData.anim = (t) => {
+      humanoidIdle(r, 0.3)(t);
+      flames.forEach((f, i) => { f.scale.setScalar(0.7 + Math.abs(Math.sin(t * 9 + i)) * 0.6); f.position.x = Math.sin(t * 11 + i) * 0.012; });
+    };
+    return r.root;
+  },
+  // 仔竜の斥候
+  whelp(card, P) {
+    const g = recolorDragon(BUILDERS.dragon(card, P), { scale: '#5aa85a', wing: '#c8b24a', belly: '#e8e0a0' });
+    g.scale.setScalar(0.62);
+    g.userData.flying = true;
+    return g;
+  },
+  // 炎鱗の飛竜: 燃える翼
+  wyvern(card, P) {
+    const g = recolorDragon(BUILDERS.dragon(card, P), { scale: '#c84a1a', wing: '#ff7a1a', belly: '#ffd27a', glowWing: 1.2 });
+    g.scale.setScalar(1.05);
+    g.userData.flying = true;
+    return g;
+  },
+  // ファフニール: 黄金の冠を戴く巨竜
+  fafnir(card, P) {
+    const g = recolorDragon(BUILDERS.dragon(card, P), { scale: '#2a5a3a', wing: '#c8a23a', belly: '#e8d8a0', glowWing: 0.4 });
+    const core = g.children[0];
+    const crownG = pivot(core, 0, 0.72, 0.27);
+    for (let i = 0; i < 6; i++) {
+      const a = -1.1 + i * 0.44;
+      part(G.cone(0.014, 0.08, 4), metal('#ffd24a'), Math.sin(a) * 0.05, 0.01, -Math.cos(a) * 0.04, crownG).rotation.x = -0.3;
+    }
+    part(G.oct(0.02), glow('#ff3a4a', 2.4), 0, 0.03, 0.04, crownG);
+    g.scale.setScalar(1.5);
+    g.userData.flying = true;
+    return g;
+  },
+  // 古竜バハル: 石の鱗と長いひげ
+  elderdragon(card, P) {
+    const g = recolorDragon(BUILDERS.dragon(card, P), { scale: '#6a7080', wing: '#4a4a5a', belly: '#a8a090' });
+    const core = g.children[0];
+    for (let i = 0; i < 3; i++) part(G.cone(0.012, 0.12, 4), mat('#e8e8e0'), -0.02 + i * 0.02, 0.56, 0.36, core).rotation.x = Math.PI * 0.85;
+    g.scale.setScalar(1.4);
+    const anim = g.userData.anim;
+    g.userData.anim = (t) => anim(t * 0.6);
+    return g;
+  },
+  // 双頭竜ゼルヴァ: 紫の鱗、首が二本
+  twinhead(card, P) {
+    const g = recolorDragon(BUILDERS.dragon(card, P), { scale: '#5a2a7a', wing: '#8a4ac8', belly: '#d8b8f0', glowWing: 0.5 });
+    const core = g.children[0];
+    const sm = mat('#5a2a7a', { roughness: 0.45, metalness: 0.2 });
+    const neck2 = part(G.cyl(0.04, 0.06, 0.2, 8), sm, 0.1, 0.55, 0.14, core);
+    neck2.rotation.set(0.7, 0, -0.4);
+    const head2 = pivot(core, 0.15, 0.63, 0.24);
+    part(G.box(0.09, 0.07, 0.14), sm, 0, 0, 0.02, head2);
+    for (const sg of [-1, 1]) part(G.sph(0.012, 6, 4), glow('#ff4af0', 3), sg * 0.035, 0.02, 0.07, head2);
+    g.scale.setScalar(1.35);
+    const anim = g.userData.anim;
+    g.userData.anim = (t) => { anim(t); head2.rotation.y = Math.sin(t * 0.9 + 1) * 0.4; };
+    g.userData.flying = true;
+    return g;
+  },
+  // 竜騎兵: 仔竜にまたがる騎士
+  dragonrider(card, P) {
+    const g = recolorDragon(BUILDERS.dragon(card, P), { scale: '#3a6a8a', wing: '#c8b24a', belly: '#e8e0c0' });
+    g.scale.setScalar(0.9);
+    const core = g.children[0];
+    const rider = humanoid({ body: P.dark, armor: '#c8a23a', skin: P.skin, head: 'helmet', headColor: '#d8c070', scale: 0.62 });
+    rider.legL.visible = rider.legR.visible = false;
+    rider.root.position.set(0, 0.46, 0.02);
+    core.add(rider.root);
+    const lance = new THREE.Group();
+    part(G.cone(0.02, 0.45, 6), metal('#e8eef8'), 0, 0.22, 0, lance);
+    rider.handR.add(lance);
+    lance.rotation.x = Math.PI / 2.1;
+    g.userData.flying = true;
+    return g;
+  },
+  // 鱗の盾兵: 竜鱗の大盾
+  scaleguard(card, P) {
+    const r = humanoid({ body: P.dark, armor: '#a88a3a', skin: P.skin, head: 'helmet', headColor: '#b8a050' });
+    const sh = new THREE.Group();
+    part(G.box(0.2, 0.26, 0.03), metal('#c8a23a'), 0, 0, 0, sh);
+    for (let i = 0; i < 6; i++) part(G.oct(0.035), metal('#e8d07a'), (i % 2 - 0.5) * 0.08, 0.08 - Math.floor(i / 2) * 0.08, 0.02, sh).scale.set(1, 1.2, 0.4);
+    sh.position.set(-0.03, 0.03, 0.06);
+    r.handL.add(sh);
+    sword(r.handR, '#dfe4ea', 0.2).rotation.x = Math.PI / 2.2;
+    r.root.userData.anim = humanoidIdle(r, 0.4);
+    return r.root;
+  },
+  // 竜の巫女: 金の衣と肩の小竜
+  dragonmaiden(card, P) {
+    const r = humanoid({ body: '#f0e8d8', armor: '#c8a23a', skin: P.skin, robe: true, head: 'halo' });
+    const pet = new THREE.Group();
+    const pb = part(G.sph(0.04, 8, 6), mat('#c84a2a'), 0, 0, 0, pet);
+    pb.scale.z = 1.5;
+    part(G.box(0.03, 0.03, 0.05), mat('#c84a2a'), 0, 0.02, 0.05, pet);
+    const pw = part(G.box(0.12, 0.004, 0.04), mat('#ffb02a', { side: THREE.DoubleSide }), 0, 0.02, 0, pet);
+    pet.position.set(0.11, 0.5, 0);
+    r.g.add(pet);
+    staff(r.handL, '#ffd24a');
+    r.root.userData.anim = (t) => { humanoidIdle(r, 0.6)(t); pw.rotation.z = Math.sin(t * 12) * 0.5; pet.position.y = 0.5 + Math.sin(t * 2) * 0.01; };
+    return r.root;
+  },
+  // 竜騎士長グラン: 竜の兜と翼の付いた金鎧
+  dragonknight(card, P) {
+    const r = humanoid({ body: '#4a3a2a', armor: '#d8b04a', skin: P.skin, head: 'horns', headColor: '#d8b04a', bulky: 1.2, scale: 1.08 });
+    wing(r.g, '#e8c46a', -1, 0.6, 0.35);
+    wing(r.g, '#e8c46a', 1, 0.6, 0.35);
+    const lance = new THREE.Group();
+    part(G.cone(0.03, 0.62, 6), metal('#f4f0e0'), 0, 0.3, 0, lance);
+    part(G.box(0.002, 0.08, 0.12), mat('#c83a2a', { side: THREE.DoubleSide }), 0, 0.5, -0.06, lance);
+    r.handR.add(lance);
+    lance.rotation.x = Math.PI / 2.1;
+    r.root.userData.anim = humanoidIdle(r, 0.2);
+    return r.root;
+  },
+  // 白銀の片翼・アルジャンテ: 銀の髪と左の片翼
+  argente(card, P) {
+    const r = humanoid({ body: '#e8eef8', armor: '#b8c4d8', skin: '#f4e4d8', robe: true, head: 'elf' });
+    r.head.children.forEach((c) => { if (c.material && c.material.color && c.material.color.getHexString() === 'e8d27a') c.material = mat('#e8eef8'); });
+    const hair = part(G.cone(0.08, 0.3, 8), mat('#e8eef8'), 0, -0.1, -0.05, r.head);
+    hair.rotation.x = 0.1;
+    const w = wing(r.g, '#dfe8f8', -1, 1.15, 0.7);
+    const orb = part(G.ico(0.05, 1), glow('#cfe8ff', 2.4), 0.2, 0.55, 0.05, r.root);
+    r.root.userData.anim = (t) => {
+      humanoidIdle(r, 0.2)(t);
+      r.g.position.y = 0.04 + Math.sin(t * 1.4) * 0.02;
+      w.rotation.y = 0.5 + Math.sin(t * 1.4) * 0.12;
+      orb.position.y = 0.55 + Math.sin(t * 2) * 0.04;
+      orb.rotation.y = t;
+    };
+    return r.root;
+  },
+  // 黄金の片翼・リュミオール: 金の髪と右の片翼、宙に浮かぶ
+  lumiore(card, P) {
+    const r = humanoid({ body: '#fff2c8', armor: '#e8b84a', skin: '#f4e0c8', robe: true, head: 'elf' });
+    const hair = part(G.cone(0.08, 0.28, 8), mat('#ffd86a'), 0, -0.09, -0.05, r.head);
+    hair.rotation.x = 0.1;
+    const w = wing(r.g, '#ffd86a', 1, 1.15, 0.9);
+    const ring = part(G.torus(0.1, 0.008, 4, 24), glow('#ffe08a', 2.4), 0, 0.68, -0.02, r.g);
+    ring.rotation.x = Math.PI / 2.2;
+    r.root.userData.anim = (t) => {
+      humanoidIdle(r, 0.5)(t);
+      r.g.position.y = 0.1 + Math.sin(t * 1.8) * 0.03;
+      w.rotation.y = -0.5 - Math.sin(t * 1.8) * 0.15;
+      ring.rotation.z = t;
+    };
+    r.root.userData.flying = true;
+    return r.root;
+  },
+});
+
 /** カード ID と陣営の色からユニット模型を生成する */
 export function buildUnitModel(cardId) {
   const card = CARDS[cardId];
@@ -1314,5 +1518,7 @@ export const MODEL_HEIGHT = {
   imp: 0.75, golem: 0.8, mech: 0.85, cavalry: 0.85, wolf: 0.55, lizard: 0.5, gnome: 0.6, cog: 0.6,
   phoenix: 0.75, bear: 0.8, wisp: 0.65, sapling: 0.4, wall: 0.5, drone: 0.6, bomber: 0.6, titan: 1.1, elder: 1.15,
   inferno: 1.05, sunpriest: 0.8, worldtree: 1.3, rainlord: 1.05, astra: 1.1, stargazer: 0.8,
+  dragonkin: 0.75, flameblade: 0.85, whelp: 0.55, wyvern: 0.9, fafnir: 1.2, elderdragon: 1.15, twinhead: 1.15, dragonrider: 0.9,
+  scaleguard: 0.75, dragonmaiden: 0.8, dragonknight: 0.9, argente: 0.85, lumiore: 0.9,
   subject: 0.65, researcher: 0.75, germ: 0.75, warden: 0.75, tesla: 0.85, thunderbeast: 0.6, proto: 0.95, feelin: 0.8, sephy: 0.8, volt: 0.85,
 };

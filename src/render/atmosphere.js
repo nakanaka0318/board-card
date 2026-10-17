@@ -4,8 +4,9 @@
 //   zerog:  無重力の星海 — 深い宇宙、輪をもつ惑星、浮かび上がる岩と星屑
 import * as THREE from 'three';
 import { makeGlowTexture } from './textures.js';
+import { buildUnitModel } from './models.js';
 
-const KINDS = ['scorch', 'rain', 'zerog', 'lab'];
+const KINDS = ['scorch', 'rain', 'zerog', 'lab', 'dragonsky'];
 
 const v3 = (r, g, b) => new THREE.Vector3(r, g, b);
 const PALETTES = {
@@ -27,6 +28,12 @@ const PALETTES = {
     hemi: new THREE.Color('#c8ffe4'), hemiI: 0.85, sun: new THREE.Color('#d8ffe8'), sunI: 1.7,
     ring: new THREE.Color('#7dff9a'), mote: new THREE.Color('#b8ffb8'), stars: 0.05,
   },
+  dragonsky: {
+    top: v3(0.16, 0.12, 0.2), mid: v3(0.85, 0.6, 0.32), low: v3(0.3, 0.16, 0.12), aur: v3(1.0, 0.85, 0.5), aurAmp: 0.6,
+    fog: new THREE.Color('#5a3a2a'), fogD: 0.018, bg: new THREE.Color('#2a1a14'),
+    hemi: new THREE.Color('#ffe6b8'), hemiI: 1.05, sun: new THREE.Color('#fff0c8'), sunI: 2.8,
+    ring: new THREE.Color('#ffd27a'), mote: new THREE.Color('#fff2c0'), stars: 0.0,
+  },
   lab: {
     top: v3(0.03, 0.0, 0.06), mid: v3(0.14, 0.05, 0.26), low: v3(0.02, 0.0, 0.05), aur: v3(0.4, 1.0, 0.85), aurAmp: 1.1,
     fog: new THREE.Color('#1a0e2e'), fogD: 0.03, bg: new THREE.Color('#06030c'),
@@ -45,7 +52,7 @@ export class Atmosphere {
   constructor(view) {
     this.v = view;
     this.target = null;
-    this.w = { scorch: 0, rain: 0, zerog: 0, lab: 0 };
+    this.w = { scorch: 0, rain: 0, zerog: 0, lab: 0, dragonsky: 0 };
     this.flash = 0;
     const scene = view.scene;
     const glowTex = makeGlowTexture();
@@ -110,6 +117,19 @@ export class Atmosphere {
       p.x = (Math.random() - 0.5) * 22; p.y = Math.random() * 12 - 4; p.z = (Math.random() - 0.5) * 22;
     });
 
+    // --- 竜の居る空: 遠くを旋回する竜の影 ---
+    this.dragons = [];
+    this.dragonM = new THREE.MeshBasicMaterial({ color: '#2a1a14', transparent: true, opacity: 0, fog: false, depthWrite: false });
+    for (let i = 0; i < 4; i++) {
+      const m = buildUnitModel(i % 2 ? 'dr_fafnir' : 'dr_wyvern');
+      m.traverse((o) => { if (o.isMesh) { o.material = this.dragonM; o.castShadow = false; } });
+      m.scale.setScalar(5 + i * 1.5);
+      m.userData.orbit = { r: 26 + i * 6, y: -9 + i * 2.5, s: 0.06 + i * 0.015, ph: i * 1.7 };
+      m.visible = false;
+      scene.add(m);
+      this.dragons.push(m);
+    }
+
     this.apply(0);
   }
 
@@ -155,7 +175,7 @@ export class Atmosphere {
   apply(dt, t = 0) {
     const v = this.v, w = this.w;
     const B = PALETTES.base;
-    const rest = Math.max(0, 1 - w.scorch - w.rain - w.zerog - w.lab);
+    const rest = Math.max(0, 1 - w.scorch - w.rain - w.zerog - w.lab - w.dragonsky);
     const mixV = (key) => {
       const out = B[key].clone().multiplyScalar(rest);
       for (const k of KINDS) if (w[k]) out.addScaledVector(PALETTES[k][key], w[k]);
@@ -216,6 +236,17 @@ export class Atmosphere {
       this.rain.geometry.attributes.position.needsUpdate = true;
     }
     this.stepSparks(dt, t);
+    // 竜の影
+    this.dragonM.opacity = w.dragonsky * 0.85;
+    for (const d of this.dragons) {
+      d.visible = w.dragonsky > 0.01;
+      if (!d.visible) continue;
+      const o = d.userData.orbit;
+      const a = t * o.s + o.ph;
+      d.position.set(Math.cos(a) * o.r, o.y + Math.sin(t * 0.5 + o.ph) * 1.5, -Math.abs(Math.sin(a)) * o.r - 20);
+      d.rotation.y = -a + Math.PI;
+      d.userData.anim(t * 0.6 + o.ph);
+    }
     // 惑星と星屑 (ゆっくり上昇し、無重力を感じさせる)
     this.planet.visible = w.zerog > 0.01;
     this.planetM.uniforms.op.value = w.zerog;

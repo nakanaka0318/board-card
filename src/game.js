@@ -1,7 +1,7 @@
 // 対局の進行役: ルールエンジン・3D ビュー・HUD・AI をつなぐ。
 import { CARDS, FACTIONS, ENVIRONMENTS } from './engine/cards.js';
 import {
-  W, H, idx, dist, createGame, applyAction, reachable, pathTo, targetsFrom, canMove, canAttack, canPlay, cpOf, moveCp, canSkill, COMMAND_POINTS,
+  W, H, idx, dist, createGame, applyAction, reachable, pathTo, targetsFrom, canMove, canAttack, canPlay, cpOf, moveCp, canSkill, costOf, isEnhanced, playCost, COMMAND_POINTS,
   canHero, cardTargets, targetsFor, unitAt, unitById, forecast, hasAnyAction, effRangeAt, tileAt, coordName,
 } from './engine/rules.js';
 import { DIFFICULTY, planTurn, describePlan, intentOf, evaluate, winProb, threatMap } from './engine/ai.js';
@@ -149,7 +149,7 @@ export class Game {
         }
         case 'hero': {
           const h = FACTIONS[s.players[e.player].faction].hero;
-          this.hud.addLog(`${this.names[e.player]}: 英雄の力「${h.name}」 (${coordName(e.x, e.y)})`, 'p' + e.player);
+          this.hud.addLog(`${this.names[e.player]}: 英雄の力「${h.name}」${e.x !== undefined ? ` (${coordName(e.x, e.y)})` : ''}`, 'p' + e.player);
           this.hud.setMana(e.player, e.mana, s.players[e.player].maxMana);
           break;
         }
@@ -172,6 +172,12 @@ export class Game {
           break;
         case 'cp':
           this.hud.setCp(e.player, e.cp);
+          break;
+        case 'enhance':
+          this.hud.addLog(`　↳ エンハンス発動!`, 'p' + e.player);
+          break;
+        case 'toDeck':
+          this.hud.addLog(`${this.names[e.player]}は手札を${e.count}枚山札に戻した`, 'p' + e.player);
           break;
         case 'crystal':
           this.hud.addLog(`${this.names[e.player]}: マナ結晶から +${e.amount} マナ`, 'p' + e.player);
@@ -708,7 +714,8 @@ export class Game {
       const hint = !sel.targets ? `${c.text} — 「発動する」で使用`
         : c.type === 'unit' ? '光っているマスをタップ (カードをドラッグしてもOK)'
           : `${targetText(c)}をタップ${c.dir ? ' → 向きを選択' : ''}`;
-      this.hud.setActionBar({ title: `${c.name} <small>${c.cost}マナ</small>`, hint, buttons });
+      const enh = isEnhanced(s, this.human, sel.cardId);
+      this.hud.setActionBar({ title: `${c.name} <small>${playCost(s, this.human, sel.cardId)}マナ${enh ? ' ・ エンハンス' : ''}</small>`, hint, buttons });
     } else if (sel.mode === 'hero') {
       const h = FACTIONS[s.players[this.human].faction].hero;
       this.hud.setActionBar({ title: `英雄の力「${h.name}」 <small>${h.cost}マナ</small>`, hint: `${h.text} 光っている対象をタップ`, buttons: [cancel] });
@@ -820,7 +827,8 @@ export class Game {
     const c = CARDS[h.cardId];
     if (!canPlay(s, this.human, h)) {
       this.sfx('error');
-      this.hud.toast(c.cost > s.players[this.human].mana ? `マナが足りません (必要 ${c.cost} / 現在 ${s.players[this.human].mana})` : '今は使える対象がありません');
+      const need = costOf(s, this.human, h.cardId);
+      this.hud.toast(need > s.players[this.human].mana ? `マナが足りません (必要 ${need} / 現在 ${s.players[this.human].mana})` : '今は使える対象がありません');
       return;
     }
     this.selectCard(h);
@@ -836,7 +844,17 @@ export class Game {
   }
 
   async playCard(h, { x, y, dir }) {
-    await this.perform({ type: 'play', handUid: h.uid, x, y, dir });
+    const c = CARDS[h.cardId];
+    let pick;
+    // 手札を選ぶ効果 (リュミオールなど): 残りの手札が選ぶ枚数より多ければ選ばせる
+    if (c.pickHand) {
+      const others = this.state.players[this.human].hand.filter((x) => x.uid !== h.uid);
+      if (others.length > c.pickHand) {
+        pick = await this.hud.pickHandCards(others, c.pickHand, `${c.name}: 山札に戻すカードを${c.pickHand}枚選んでください`);
+        if (!pick) { this.sfx('cancel'); this.clearSelection(); return; }
+      } else pick = others.map((x) => x.uid);
+    }
+    await this.perform({ type: 'play', handUid: h.uid, x, y, dir, pick });
   }
 
   armHero() {
@@ -847,6 +865,7 @@ export class Game {
     if (!canHero(s, this.human)) { this.sfx('error'); return; }
     const h = FACTIONS[s.players[this.human].faction].hero;
     this.clearSelection(false);
+    if (!h.target) return this.perform({ type: 'hero' }); // 対象を選ばない英雄の力
     this.sel = { mode: 'hero', targets: targetsFor(s, this.human, h.target) };
     this.sfx('select');
     this.updateHighlights();

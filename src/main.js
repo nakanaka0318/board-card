@@ -14,6 +14,7 @@ import { DeckBuilder } from './ui/deckbuilder.js';
 import { openChangelog, updateBadges } from './ui/changelog.js';
 import { deckOptions, resolveDeck, randomPreset } from './ui/decks.js';
 import { initTuck, refreshTuck } from './ui/tuck.js';
+import { renderFactionChips, factionDetailHtml } from './ui/factions.js';
 import { openTier, renderTierBanner } from './ui/tier.js';
 
 const $ = (id) => document.getElementById(id);
@@ -45,19 +46,12 @@ let titleSpin = true;
 // ---------------- タイトル画面 ----------------
 function buildTitle() {
   // 勢力
-  const fr = $('opt-faction');
-  fr.innerHTML = '';
-  for (const [id, F] of Object.entries(FACTIONS)) {
-    const b = el('button', `faction-card f-${id}`);
-    b.dataset.v = id;
-    const art = cardArt('leader_' + id);
-    b.innerHTML = `<div class="fc-art" style="background-image:url(${art || ''})"></div>
-      <div><div class="fc-name">${F.emblem} ${F.name}</div><div class="fc-desc">${F.desc}</div>
-      <div class="fc-hero">英雄の力「${F.hero.name}」: ${F.hero.text}</div></div>`;
-    fr.appendChild(b);
-  }
-  const af = $('opt-ai-faction');
-  af.innerHTML = '<button data-v="random">ランダム</button>' + Object.entries(FACTIONS).map(([id, F]) => `<button data-v="${id}">${F.short}</button>`).join('');
+  // 勢力 (FACTIONS に足すだけで並ぶ)
+  if (!FACTIONS[choice.faction]) choice.faction = Object.keys(FACTIONS)[0];
+  if (choice.aiFaction !== 'random' && !FACTIONS[choice.aiFaction]) choice.aiFaction = 'random';
+  renderFactionChips($('opt-faction'));
+  renderFactionChips($('opt-ai-faction'), { random: true, compact: true });
+  $('faction-detail').innerHTML = factionDetailHtml(choice.faction);
   const df = $('opt-diff');
   const ddesc = { easy: 'のんびり考える', normal: '数手先を読む', hard: '応手まで深読み' };
   df.innerHTML = Object.entries(DIFFICULTY).map(([id, d]) => `<button data-v="${id}">${d.name}<small>${ddesc[id]}</small></button>`).join('');
@@ -75,7 +69,7 @@ function buildTitle() {
         sync();
         updateTitleLabels();
         if (key === 'map' || key === 'faction' || key === 'aiFaction') demoBoard();
-        if (key === 'faction') renderDeckPick();
+        if (key === 'faction') { renderDeckPick(); $('faction-detail').innerHTML = factionDetailHtml(choice.faction); }
         saveChoice();
       };
     });
@@ -140,11 +134,10 @@ function demoBoard() {
   if (game) return;
   const f1 = choice.aiFaction === 'random' ? 'azure' : choice.aiFaction;
   const s = createGame({ factions: [choice.faction, f1], seed: 7, first: 0, map: choice.map === 'random' ? 'classic' : choice.map });
-  // 見栄えのため何体か並べる
-  const demo = {
-    fire: ['fi_dragon', 'fi_golem', 'fi_imp'], forest: ['fo_beast', 'fo_treant', 'fo_wolf'], azure: ['az_leviathan', 'az_guardian', 'az_turret'],
-    lab: ['lb_sephy', 'lb_germ', 'lb_subject'],
-  };
+  // 見栄えのため、各勢力の必要マナの高いユニット (伝説を除く) を3体ずつ並べる
+  const showcase = (f) => Object.values(CARDS).filter((c) => c.faction === f && c.type === 'unit' && !c.legend && !c.token)
+    .sort((a, b) => b.cost - a.cost).slice(0, 3).map((c) => c.id);
+  const demo = { [choice.faction]: showcase(choice.faction), [f1]: showcase(f1) };
   const put = (p, ids, row) => ids.forEach((id, i) => {
     const x = [1, 3, 5][i];
     const y = row;

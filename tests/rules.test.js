@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createGame, cloneState, applyAction, reachable, calcDamage, unitAt, leaderOf, idx, W, H, tileAt, targetsFor, effAtk, canSkill,
+  createGame, cloneState, applyAction, reachable, calcDamage, unitAt, leaderOf, idx, W, H, tileAt, targetsFor, effAtk, canSkill, costOf,
 } from '../src/engine/rules.js';
 import { MAPS, buildMap } from '../src/engine/maps.js';
 import { CARDS, DECKS } from '../src/engine/cards.js';
@@ -432,3 +432,54 @@ function summon2(s, p, cardId, x, y) {
   const h = s.players[p].hand[s.players[p].hand.length - 1];
   assert.ok(applyAction(s, { type: 'play', handUid: h.uid, x, y }), 'play ' + cardId);
 }
+
+test('双翼の竜: エンハンス・最大マナ・前進・竜の居る空・リュミオールの手札戻し', () => {
+  const s = blank({ factions: ['wing', 'fire'] });
+  // エンハンス4: 4マナ以上なら4マナ払って左右に龍人
+  s.players[0].hand.push({ uid: 9001, cardId: 'dr_herald' });
+  s.players[0].mana = 5;
+  assert.ok(applyAction(s, { type: 'play', handUid: 9001, x: 3, y: 1 }));
+  assert.equal(s.players[0].mana, 1);
+  assert.equal(s.units.filter((u) => u.cardId === 'dr_herald').length, 3);
+  // マナが足りなければ通常コスト
+  s.players[0].hand.push({ uid: 9002, cardId: 'dr_herald' });
+  s.players[0].mana = 3;
+  assert.ok(applyAction(s, { type: 'play', handUid: 9002, x: 0, y: 0 }));
+  assert.equal(s.players[0].mana, 1);
+  // 最大マナ+1 (今のマナは増えない)
+  const mm = s.players[0].maxMana;
+  summonSpell(s, 0, 's_dr_revelation');
+  assert.equal(s.players[0].maxMana, mm + 1);
+  // 焔の突撃剣士は前に3マス
+  const fb = summon(s, 0, 'dr_flameblade', 5, 1);
+  assert.equal(fb.y, 4);
+  // 竜の居る空: 持ち主だけ -2
+  summon(s, 0, 'dr_argente', 6, 0);
+  assert.equal(s.envKind, 'dragonsky');
+  assert.equal(costOf(s, 0, 'dr_fafnir'), 7);
+  assert.equal(costOf(s, 1, 'fi_dragon'), CARDS.fi_dragon.cost);
+  // リュミオール: 選んだ2枚を山札へ戻し2枚引く
+  s.players[0].hand = [{ uid: 1, cardId: 'n_giant' }, { uid: 2, cardId: 'n_squire' }, { uid: 3, cardId: 'n_spear' }];
+  const deck0 = s.players[0].deck.length;
+  s.players[0].hand.push({ uid: 9003, cardId: 'dr_lumiore' });
+  s.players[0].mana = 10;
+  assert.ok(applyAction(s, { type: 'play', handUid: 9003, x: 2, y: 0, pick: [1, 3] }));
+  const ids = s.players[0].hand.map((h) => h.cardId);
+  assert.equal(ids.length, 3);
+  assert.ok(ids.includes('n_squire'));
+  assert.equal(s.players[0].deck.length, deck0);
+});
+
+test('双翼の竜: 英雄の力は対象なしで2種類を手札に、ファフニールは相手の将に2ダメージ', () => {
+  const s = blank({ factions: ['wing', 'fire'] });
+  s.players[0].mana = 5;
+  const n = s.players[0].hand.length;
+  assert.ok(applyAction(s, { type: 'hero' }));
+  const added = s.players[0].hand.slice(n).map((h) => h.cardId);
+  assert.equal(added.length, 2);
+  assert.notEqual(added[0], added[1]);
+  summon(s, 0, 'dr_fafnir', 3, 1);
+  const L = leaderOf(s, 1), hp = L.hp;
+  applyAction(s, { type: 'end' });
+  assert.equal(L.hp, hp - 2);
+});

@@ -1,4 +1,5 @@
 // デッキ編成画面
+import { renderFactionChips } from './factions.js';
 import { CARDS, FACTIONS, PRESETS, cardPool, validateDeck, maxCopies, DECK_SIZE, typeName } from '../engine/cards.js';
 import { renderCard, el } from './cardview.js';
 import { showCardDetail, onLongPress } from './cardinfo.js';
@@ -66,11 +67,10 @@ export class DeckBuilder {
   renderFactions() {
     const box = this.root.querySelector('.db-factions');
     box.innerHTML = '';
-    for (const [id, F] of Object.entries(FACTIONS)) {
-      const b = el('button', id === this.faction ? 'sel' : '', `${F.emblem} ${F.short}`);
-      b.style.setProperty('--fc', F.color);
-      b.onclick = () => { this.sound.play('click'); this.open(id, PRESETS[id][0].id); };
-      box.appendChild(b);
+    renderFactionChips(box, { compact: true });
+    for (const b of box.querySelectorAll('.f-chip')) {
+      b.classList.toggle('sel', b.dataset.v === this.faction);
+      b.onclick = () => { this.sound.play('click'); this.open(b.dataset.v, PRESETS[b.dataset.v][0].id); };
     }
   }
 
@@ -182,7 +182,8 @@ export class DeckBuilder {
     if (!ids.length) list.appendChild(el('div', 'db-empty', 'まだカードがありません'));
     for (const id of ids) {
       const c = CARDS[id];
-      const row = el('div', `db-row f-${c.faction}`);
+      const row = el('div', 'db-row');
+      row.style.setProperty('--fc', FACTIONS[c.faction] ? FACTIONS[c.faction].color : '#b8b0a0');
       row.appendChild(el('span', 'db-cost', String(c.cost)));
       const name = el('button', 'db-rname', `${c.legend ? '★' : ''}${c.name}<small>${typeName(c)}</small>`);
       name.onclick = () => showCardDetail(id);

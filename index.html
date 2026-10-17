@@ -82,6 +82,7 @@
     <div id="banner"></div>
     <div id="played-card"></div>
     <div id="dir-picker" class="hidden"></div>
+    <div id="hand-pick" class="hidden"></div>
     <div id="toast"></div>
   </div>
 
@@ -102,7 +103,8 @@
       </section>
       <section>
         <h3 id="lbl-my-faction">あなたの勢力</h3>
-        <div class="faction-row" id="opt-faction"></div>
+        <div id="opt-faction"></div>
+        <div id="faction-detail"></div>
       </section>
       <section>
         <h3>使うデッキ</h3>
@@ -111,7 +113,7 @@
       <section class="two-col">
         <div>
           <h3 id="lbl-ai-faction">相手の勢力</h3>
-          <div class="opt-row" id="opt-ai-faction"></div>
+          <div id="opt-ai-faction"></div>
         </div>
         <div>
           <h3>AI の強さ</h3>
@@ -216,6 +218,12 @@
           <li><b>奥義</b>: 一部の伝説ユニットが持つ、盤面全体を変える技。1体につき1回だけ、攻撃の代わりに使う (指揮力1)。召喚したターンは使えない。ユニットを選ぶと「★奥義」ボタンが出る。</li>
           <li><b>環境</b>: 一部の伝説ユニットが場にいる間、盤の外の空模様が変わり、全体のルールが変わる (敵味方の両方に効く)。複数いる場合は最後に召喚したものが有効。そのユニットが倒れると元に戻る。</li>
           <li>☀️ <b>焦天</b>: 全ユニット (将を含む) の攻撃力+1 / 🌧 <b>恵みの霧雨</b>: ターン開始時、手番側のユニット (将を除く) のHP+1 / 🌌 <b>無重力の星海</b>: 全ユニットの移動力+1、段差2以上の崖も登れる。</li>
+        </ul>
+        <h4>🐉 エンハンスと最大マナ</h4>
+        <ul>
+          <li><b>エンハンス N</b>: そのカードを使うときに N マナ以上あれば、自動で N マナを払って追加効果が発動する (手札で金色に光り「エンハンス」と表示される)。</li>
+          <li>「最大マナ+1」の効果は最大マナ (上限10) を増やす。今のマナは増えない。</li>
+          <li>環境「竜の居る空」の持ち主は、手札のカードの必要マナが2少なくなる (緑色の数字)。</li>
         </ul>
         <h4>📘 キーワード能力</h4>
         <dl class="kw-list" id="kw-glossary"></dl>
