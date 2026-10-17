@@ -408,7 +408,7 @@ function summonSpell(s, p, cardId) {
   assert.ok(applyAction(s, { type: 'play', handUid: h.uid }), 'play ' + cardId);
 }
 
-test('強化: 狂乱は指揮力+1で再行動、潮流は敵を凍結、偵察ドローンは1枚引く', () => {
+test('強化・リワーク: 狂乱は指揮力+1で再行動、大海嘯は行を水辺にして凍結、機神母艦は1枚引く', () => {
   const s = blank();
   const u = addUnit(s, 0, 'fi_blade', 3, 3);
   u.attacked = true; u.moved = true;
@@ -418,9 +418,11 @@ test('強化: 狂乱は指揮力+1で再行動、潮流は敵を凍結、偵察�
   assert.equal(u.atk, CARDS.fi_blade.atk + 2);
   assert.ok(!u.attacked && !u.moved);
   const e = addUnit(s, 1, 'n_giant', 2, 5);
+  tileAt(s, 4, 5).height = 2;
   summon2(s, 0, 'f_flood', 2, 5);
   assert.ok(e.frozen);
   assert.equal(tileAt(s, 2, 5).terrain, 'water');
+  assert.equal(tileAt(s, 4, 5).height, 0);
   const n = s.players[0].hand.length;
   summon2(s, 0, 'az_drone', 0, 1);
   assert.equal(s.players[0].hand.length, n + 1);

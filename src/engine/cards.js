@@ -332,13 +332,18 @@ def('f_rotate', {
   effect(G, c) { G.rotateBlock(c.x, c.y, c.dir); },
 });
 def('f_flood', {
-  name: '潮流', faction: 'azure', type: 'field', cost: 1, target: 'tile', icon: '🌊', fx: 'flood',
-  text: 'マス1つを水辺に変え、高さ-1。そこにいる敵ユニットを凍結させる。',
+  name: '大海嘯', faction: 'azure', type: 'field', cost: 7, target: 'row', icon: '🌊', fx: 'flood',
+  text: '選んだ行を水辺・高さ0にする。そこにいる敵ユニットを凍結させる。',
   effect(G, c) {
-    G.setTerrain(c.x, c.y, 'water');
-    G.changeHeight(c.x, c.y, -1);
-    const u = G.unitAt(c.x, c.y);
-    if (u && u.owner !== c.player) G.freeze(u);
+    for (let y = c.y; y <= c.y; y++) {
+      if (y < 0 || y > 6) continue;
+      for (let x = 0; x < 7; x++) {
+        G.setTerrain(x, y, 'water');
+        G.changeHeight(x, y, -3);
+        const u = G.unitAt(x, y);
+        if (u && u.owner !== c.player && !u.leader) G.freeze(u);
+      }
+    }
   },
 });
 
@@ -391,7 +396,11 @@ def('fi_bomber', {
     for (const u of G.enemiesWithin(c.player, c.self.x, c.self.y, 1)) G.damage(u, 2, 'spell');
   },
 });
-def('fi_cannon', { name: '火砲兵', faction: 'fire', type: 'unit', cost: 4, atk: 3, hp: 3, move: 1, range: 3, keywords: ['splash'], model: 'gunner', text: '' });
+def('fi_cannon', {
+  name: '灼熱巨砲ヴォルカン', faction: 'fire', type: 'unit', cost: 8, atk: 5, hp: 6, move: 1, range: 3, keywords: ['splash', 'lavaWalk'], model: 'bigcannon',
+  text: '召喚時: 敵の将に2ダメージ。',
+  onSummon(G, c) { const L = G.leaderOf(1 - c.player); G.fx('bolt', c.self, L, {}); G.damage(L, 2, 'spell'); },
+});
 def('fi_guard', {
   name: '親衛隊長', faction: 'fire', type: 'unit', cost: 5, atk: 3, hp: 4, move: 2, model: 'knight',
   text: '召喚時: 他の味方ユニットすべての攻撃力+1。',
@@ -403,9 +412,9 @@ def('fi_phoenix', {
   onDeath(G, c) { G.addCard(c.player, 'fi_phoenix'); },
 });
 def('s_ignite', {
-  name: '点火', faction: 'fire', type: 'spell', cost: 1, target: 'enemyUnit', icon: '🔥', fx: 'spark',
-  text: '敵ユニット1体に1ダメージ。溶岩の上にいれば3ダメージ。',
-  effect(G, c) { const lava = G.s.tiles[c.y * 7 + c.x].terrain === 'lava'; G.damage(c.target, lava ? 3 : 1, 'spell'); },
+  name: '業火の審判', faction: 'fire', type: 'spell', cost: 7, target: 'enemyUnit', icon: '🔥', fx: 'fireball',
+  text: '敵ユニット1体 (将を除く) に7ダメージ。そのマスを溶岩にする。',
+  effect(G, c) { G.damage(c.target, 7, 'spell'); G.setTerrain(c.x, c.y, 'lava'); },
 });
 def('s_frenzy', {
   name: '狂乱', faction: 'fire', type: 'spell', cost: 2, target: 'friendlyUnit', icon: '😡', fx: 'warcry',
@@ -437,9 +446,12 @@ def('s_meteor', {
 
 // ---------------- 翠緑の森 ----------------
 def('fo_seedling', {
-  name: '若木', faction: 'forest', type: 'unit', cost: 1, atk: 0, hp: 3, move: 0, keywords: ['guard'], model: 'sapling',
-  text: '動けない。自分のターン開始時: +1/+1 (成長する)。',
-  onTurnStart(G, c) { G.buff(c.self, 1, 1); },
+  name: '太古の森神', faction: 'forest', type: 'unit', cost: 8, atk: 7, hp: 10, move: 2, regen: 2, keywords: ['guard', 'forestKin'], model: 'forestgod',
+  text: '召喚時: 他の味方ユニットすべて (将を含む) に+1/+2。周囲のマスを森にする。',
+  onSummon(G, c) {
+    for (const u of G.friendlyAll(c.player)) if (u !== c.self) G.buff(u, 1, 2);
+    for (const [x, y] of G.cross(c.self.x, c.self.y)) G.setTerrain(x, y, 'forest');
+  },
 });
 def('fo_dryad', {
   name: 'ドライアド', faction: 'forest', type: 'unit', cost: 2, atk: 2, hp: 3, move: 2, keywords: ['forestKin'], model: 'elf',
@@ -454,9 +466,9 @@ def('fo_elder', {
   onSummon(G, c) { for (const [x, y] of G.cross(c.self.x, c.self.y)) G.setTerrain(x, y, 'forest'); },
 });
 def('s_entangle', {
-  name: '絡みつく蔓', faction: 'forest', type: 'spell', cost: 1, target: 'enemyUnit', icon: '🌿', fx: 'thorns',
-  text: '敵ユニット1体を凍結させ、そのマスを森にする。',
-  effect(G, c) { G.freeze(c.target); G.setTerrain(c.x, c.y, 'forest'); },
+  name: '大地の怒り', faction: 'forest', type: 'spell', cost: 7, target: null, icon: '🌿', fx: 'thorns',
+  text: '敵ユニットすべてを凍結させる。自分の将のHPを5回復。',
+  effect(G, c) { for (const u of G.enemyUnits(c.player)) G.freeze(u); G.heal(G.leaderOf(c.player), 5); },
 });
 def('s_bloom', {
   name: '開花', faction: 'forest', type: 'spell', cost: 2, target: null, icon: '🌸', fx: 'heal',
@@ -464,16 +476,19 @@ def('s_bloom', {
   effect(G, c) { for (const u of G.friendlyAll(c.player)) G.heal(u, 3); },
 });
 def('f_pillar', {
-  name: '大地の柱', faction: 'forest', type: 'field', cost: 1, target: 'tile', icon: '🗿', fx: 'raise',
-  text: 'マス1つの高さ+2 (最大3) し、森にする。',
-  effect(G, c) { G.changeHeight(c.x, c.y, 2); G.setTerrain(c.x, c.y, 'forest'); },
+  name: '世界樹の根', faction: 'forest', type: 'field', cost: 6, target: null, icon: '🌳', fx: 'quake',
+  text: '味方ユニットがいるマスすべてを森にして高さ+1。味方ユニットすべてに+1/+2。',
+  effect(G, c) {
+    for (const u of G.friendlyAll(c.player)) { G.setTerrain(u.x, u.y, 'forest'); G.changeHeight(u.x, u.y, 1); if (!u.leader) G.buff(u, 1, 2); }
+  },
 });
 
 // ---------------- 蒼穹機関 ----------------
 def('az_drone', {
-  name: '偵察ドローン', faction: 'azure', type: 'unit', cost: 1, atk: 1, hp: 1, move: 4, keywords: ['flying'], model: 'drone',
-  text: '召喚時: カードを1枚引く。',
+  name: '機神母艦アーク', faction: 'azure', type: 'unit', cost: 9, atk: 5, hp: 7, move: 2, range: 2, armor: 1, keywords: ['flying'], model: 'ark',
+  text: '召喚時: カードを1枚引く。自分のターン開始時: 他の味方ユニットすべてのHPを1回復。',
   onSummon(G, c) { G.draw(c.player, 1); },
+  onTurnStart(G, c) { for (const u of G.friendlyAll(c.player)) if (u !== c.self) G.heal(u, 1); },
 });
 def('az_engineer', {
   name: '技師', faction: 'azure', type: 'unit', cost: 2, atk: 1, hp: 3, move: 2, model: 'cog',
@@ -922,7 +937,7 @@ export const PRESETS = {
   fire: [
     { id: 'fire_std', name: '紅蓮の進軍', desc: '突撃ユニットと火力で押し切る標準型。', cards: build([
       'fi_imp', 'fi_blade', 'fi_pyro', 'fi_berserker', 'fi_golem', 'fi_salamander', ['fi_dragon', 1],
-      's_fireball', 'f_eruption', 's_warcry', 'n_assassin', 'n_archer', 'n_cavalry', ['s_lightning', 1], 'f_uplift', ['fi_guard', 1], ['fi_inferno', 1],
+      's_fireball', 'f_eruption', 's_warcry', 's_ignite', 'n_archer', 'fi_cannon', ['s_lightning', 1], 'f_uplift', ['fi_guard', 1], ['fi_inferno', 1],
     ]) },
     { id: 'fire_scorch', name: '焦土作戦', desc: '溶岩を広げて爆弾魔と不死鳥で焼き尽くす。', cards: build([
       'fi_imp', 'fi_bomber', 's_ignite', 'fi_golem', 'f_firewall', 'f_eruption', 'fi_salamander', 'fi_cannon', 's_frenzy',
@@ -932,21 +947,21 @@ export const PRESETS = {
   forest: [
     { id: 'forest_std', name: '翠緑の守り', desc: '森を広げ、回復と強化で盤面を支配する標準型。', cards: build([
       'fo_sprout', 'fo_wolf', 'fo_druid', 'fo_archer', 'fo_priestess', 'fo_treant', ['fo_beast', 1],
-      's_growth', 'f_thorns', 'f_quake', 'n_spear', 'n_archer', 'n_giant', 's_heal', ['s_supply', 1], ['fo_bear', 1], ['fo_worldtree', 1],
+      's_growth', 'f_thorns', 's_entangle', 'n_spear', 'n_archer', 'n_giant', 'fo_seedling', ['s_supply', 1], ['fo_bear', 1], ['fo_worldtree', 1],
     ]) },
     { id: 'forest_grove', name: '大樹の園', desc: '若木を育て、長老樹と大熊で押し込む成長型。', cards: build([
-      'fo_druid', 'fo_sprout', 'fo_dryad', 'fo_wolf', 'fo_wisp', 'fo_archer', ['n_ogre', 1], ['fo_rainlord', 1], 'n_giant', 'fo_bear',
-      ['fo_elder', 1], ['fo_beast', 1], 's_bloom', 's_growth', 'fo_priestess', 'fo_treant', 'f_thorns',
+      'fo_druid', 'fo_sprout', 'f_pillar', 'fo_wolf', 'fo_wisp', 'fo_archer', ['n_ogre', 1], ['fo_rainlord', 1], 'n_giant', 'fo_bear',
+      ['fo_elder', 1], ['fo_beast', 1], 'fo_seedling', 's_growth', 'fo_priestess', 'fo_treant', 'f_thorns',
     ]) },
   ],
   azure: [
     { id: 'azure_std', name: '蒼穹の機略', desc: '行のずらしと回転で戦場を組み替える標準型。', cards: build([
       'az_cog', 'az_gunner', 'az_tide', 'az_guardian', 'az_turret', ['az_leviathan', 1],
-      's_freeze', 'f_slide', 'f_rotate', 'az_sniper', ['n_squire', 1], ['az_astra', 1], 'n_shield', 'n_mage', 's_supply', 'f_uplift', ['az_magnet', 1],
+      's_freeze', 'f_slide', 'f_rotate', 'az_sniper', ['n_squire', 1], ['az_astra', 1], 'az_drone', 'n_mage', 'f_flood', 'f_uplift', ['az_magnet', 1],
     ]) },
     { id: 'azure_armor', name: '鋼鉄要塞', desc: '鉄壁の機兵で守り、狙撃と巨神で崩す。', cards: build([
       'az_turret', 'az_cog', 'az_engineer', 'az_gunner', 'az_magnet', 'az_guardian', 'az_sniper', ['az_titan', 1],
-      's_overclock', ['f_maelstrom', 1], 'f_tsunami', 's_freeze', 'n_wall', ['n_scout', 1], ['az_stargazer', 1], 's_smite', 'az_tide',
+      'f_flood', ['f_maelstrom', 1], 'f_tsunami', 's_freeze', 'az_drone', ['n_scout', 1], ['az_stargazer', 1], 's_smite', 'az_tide',
     ]) },
   ],
 };

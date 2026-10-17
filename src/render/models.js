@@ -1487,6 +1487,56 @@ Object.assign(BUILDERS, {
   },
 });
 
+// ---------------- リワークした高コストカード ----------------
+function recolorAll(g, map) {
+  g.traverse((o) => {
+    if (!o.isMesh || !o.material || !o.material.color) return;
+    const to = map[o.material.color.getHexString()];
+    if (to) o.material = typeof to === 'string' ? mat(to, { metalness: o.material.metalness, roughness: o.material.roughness }) : to;
+  });
+  return g;
+}
+Object.assign(BUILDERS, {
+  // 灼熱巨砲ヴォルカン: 赤熱した巨大な砲台
+  bigcannon(card, P) {
+    const g = BUILDERS.turret(card, P);
+    g.traverse((o) => {
+      if (!o.isMesh || !o.material || !o.material.color) return;
+      const c = o.material.color;
+      if (o.material.emissive && o.material.emissiveIntensity > 0.5) o.material = glow('#ff7a1a', 2.2);
+      else if (c.b > c.r) o.material = mat('#5a2a22', { metalness: 0.6, roughness: 0.4 });
+    });
+    g.scale.setScalar(1.35);
+    g.userData.flying = false;
+    return g;
+  },
+  // 太古の森神: 苔の光をまとう巨大な樹人
+  forestgod(card, P) {
+    const g = BUILDERS.treant(card, P);
+    g.scale.setScalar(1.45);
+    const motes = [];
+    for (let i = 0; i < 6; i++) motes.push(part(G.sph(0.018, 6, 4), glow('#b8ff7a', 2.4), 0, 0, 0, g));
+    const anim = g.userData.anim;
+    g.userData.anim = (t) => {
+      anim(t * 0.7);
+      motes.forEach((m, i) => { const a = t * 0.8 + i; m.position.set(Math.cos(a) * 0.3, 0.3 + ((t * 0.2 + i * 0.17) % 1) * 0.5, Math.sin(a) * 0.3); });
+    };
+    return g;
+  },
+  // 機神母艦アーク: 空を行く鋼の母艦
+  ark(card, P) {
+    const g = BUILDERS.whale(card, P);
+    g.traverse((o) => {
+      if (!o.isMesh || !o.material || !o.material.color) return;
+      const hex = o.material.color.getHexString();
+      if (hex === '2a4f7a') o.material = metal('#6a7f9a');
+      else if (hex === 'c9e0f0') o.material = metal('#c8d4e8');
+    });
+    g.scale.setScalar(1.25);
+    return g;
+  },
+});
+
 /** カード ID と陣営の色からユニット模型を生成する */
 export function buildUnitModel(cardId) {
   const card = CARDS[cardId];
@@ -1520,5 +1570,6 @@ export const MODEL_HEIGHT = {
   inferno: 1.05, sunpriest: 0.8, worldtree: 1.3, rainlord: 1.05, astra: 1.1, stargazer: 0.8,
   dragonkin: 0.75, flameblade: 0.85, whelp: 0.55, wyvern: 0.9, fafnir: 1.2, elderdragon: 1.15, twinhead: 1.15, dragonrider: 0.9,
   scaleguard: 0.75, dragonmaiden: 0.8, dragonknight: 0.9, argente: 0.85, lumiore: 0.9,
+  bigcannon: 1.0, forestgod: 1.3, ark: 1.15,
   subject: 0.65, researcher: 0.75, germ: 0.75, warden: 0.75, tesla: 0.85, thunderbeast: 0.6, proto: 0.95, feelin: 0.8, sephy: 0.8, volt: 0.85,
 };
