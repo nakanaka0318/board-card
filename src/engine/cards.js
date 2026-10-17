@@ -789,32 +789,31 @@ def('dr_lumiore', {
 });
 // 追加カード
 def('dr_whelp', {
-  name: '仔竜の斥候', faction: 'wing', type: 'unit', cost: 2, atk: 2, hp: 2, move: 3, keywords: ['flying'], model: 'whelp',
+  name: '仔竜の斥候', faction: 'wing', type: 'unit', cost: 2, atk: 1, hp: 1, move: 2, keywords: ['flying'], model: 'whelp',
   text: 'エンハンス5: +2/+2 し、突撃を得る。',
   enhance: { cost: 5, effect(G, c) { G.buff(c.self, 2, 2); G.wake(c.self); } },
 });
 def('dr_scaleguard', {
-  name: '鱗の盾兵', faction: 'wing', type: 'unit', cost: 2, atk: 1, hp: 4, move: 2, keywords: ['guard'], model: 'scaleguard',
+  name: '鱗の盾兵', faction: 'wing', type: 'unit', cost: 2, atk: 0, hp: 3, move: 2, keywords: ['guard'], model: 'scaleguard',
   text: 'エンハンス5: +2/+3。',
   enhance: { cost: 5, effect(G, c) { G.buff(c.self, 2, 3); } },
 });
 def('dr_rider', {
-  name: '竜騎兵', faction: 'wing', type: 'unit', cost: 3, atk: 3, hp: 3, move: 3, model: 'dragonrider',
+  name: '竜騎兵', faction: 'wing', type: 'unit', cost: 3, atk: 2, hp: 2, move: 2, model: 'dragonrider',
   text: 'エンハンス6: +3/+3 し、カードを1枚引く。',
   enhance: { cost: 6, effect(G, c) { G.buff(c.self, 3, 3); G.draw(c.player, 1); } },
 });
 def('dr_priestess', {
-  name: '竜の巫女', faction: 'wing', type: 'unit', cost: 4, atk: 2, hp: 4, move: 2, range: 2, model: 'dragonmaiden',
-  text: '召喚時: カードを1枚引く。エンハンス7: さらにカードを2枚引く。',
-  onSummon(G, c) { G.draw(c.player, 1); },
+  name: '竜の巫女', faction: 'wing', type: 'unit', cost: 4, atk: 1, hp: 3, move: 2, range: 2, model: 'dragonmaiden',
+  text: 'エンハンス7: カードを2枚引く。',
   enhance: { cost: 7, effect(G, c) { G.draw(c.player, 2); } },
 });
 def('dr_wyvern', {
-  name: '炎鱗の飛竜', faction: 'wing', type: 'unit', cost: 6, atk: 6, hp: 5, move: 3, keywords: ['flying'], model: 'wyvern',
-  text: '召喚時: 最も近い敵ユニットに3ダメージ。',
+  name: '炎鱗の飛竜', faction: 'wing', type: 'unit', cost: 6, atk: 4, hp: 3, move: 2, keywords: ['flying'], model: 'wyvern',
+  text: '召喚時: 最も近い敵ユニットに2ダメージ。',
   onSummon(G, c) {
     const es = G.enemyUnits(c.player).sort((a, b) => (Math.abs(a.x - c.self.x) + Math.abs(a.y - c.self.y)) - (Math.abs(b.x - c.self.x) + Math.abs(b.y - c.self.y)));
-    if (es[0]) { G.fx('bolt', c.self, es[0], {}); G.damage(es[0], 3, 'spell'); }
+    if (es[0]) { G.fx('bolt', c.self, es[0], {}); G.damage(es[0], 2, 'spell'); }
   },
 });
 def('dr_elder', {
@@ -870,7 +869,7 @@ def('dr_zelva', {
   },
 });
 def('dr_gran', {
-  name: '竜騎士長グラン', faction: 'wing', type: 'unit', cost: 4, atk: 4, hp: 4, move: 3, model: 'dragonknight', legend: true,
+  name: '竜騎士長グラン', faction: 'wing', type: 'unit', cost: 4, atk: 2, hp: 3, move: 2, model: 'dragonknight', legend: true,
   text: 'エンハンス8: +4/+4 し、突撃を得る。',
   enhance: { cost: 8, effect(G, c) { G.buff(c.self, 4, 4); G.wake(c.self); } },
 });
