@@ -38,7 +38,7 @@ export const ENVIRONMENTS = {
   rain: { name: '恵みの霧雨', icon: '🌧', text: 'ターン開始時、手番のプレイヤーのユニット (将を除く) すべてのHPを1回復。' },
   zerog: { name: '無重力の星海', icon: '🌌', text: '全ユニットの移動力+1 (移動力0を除く)。段差2以上の崖も登れる。' },
   lab: { name: '研究室', icon: '🧪', text: '「没入の実験体」すべて+2/+2。' },
-  dragonsky: { name: '竜の居る空', icon: '🐉', text: 'この環境を出したプレイヤーの手札のカードは必要マナ-2。' },
+  dragonsky: { name: '竜の居る空', icon: '🐉', text: 'この環境を出したプレイヤーの手札のカードは必要マナ-1。' },
 };
 
 export const FACTIONS = {
@@ -766,8 +766,8 @@ def('s_dr_will', {
 });
 def('dr_argente', {
   name: '白銀の片翼・アルジャンテ', faction: 'wing', type: 'unit', cost: 10, atk: 10, hp: 10, move: 3, range: 3, model: 'argente', legend: true, env: 'dragonsky',
-  text: '環境「竜の居る空」: 場にいる間、自分の手札のカードの必要マナ-2。自分のターン終了時: カードを2枚引く。',
-  onTurnEnd(G, c) { G.draw(c.player, 2); },
+  text: '環境「竜の居る空」: 場にいる間、自分の手札のカードの必要マナ-1。自分のターン終了時: カードを1枚引く。',
+  onTurnEnd(G, c) { G.draw(c.player, 1); },
 });
 def('dr_lumiore', {
   name: '黄金の片翼・リュミオール', faction: 'wing', type: 'unit', cost: 7, atk: 4, hp: 6, move: 5, keywords: ['flying'], model: 'lumiore', legend: true, pickHand: 2,

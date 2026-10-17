@@ -453,10 +453,10 @@ test('双翼の竜: エンハンス・最大マナ・前進・竜の居る空・
   // 焔の突撃剣士は前に3マス
   const fb = summon(s, 0, 'dr_flameblade', 5, 1);
   assert.equal(fb.y, 4);
-  // 竜の居る空: 持ち主だけ -2
+  // 竜の居る空: 持ち主だけ -1
   summon(s, 0, 'dr_argente', 6, 0);
   assert.equal(s.envKind, 'dragonsky');
-  assert.equal(costOf(s, 0, 'dr_fafnir'), 7);
+  assert.equal(costOf(s, 0, 'dr_fafnir'), 8);
   assert.equal(costOf(s, 1, 'fi_dragon'), CARDS.fi_dragon.cost);
   // リュミオール: 選んだ2枚を山札へ戻し2枚引く
   s.players[0].hand = [{ uid: 1, cardId: 'n_giant' }, { uid: 2, cardId: 'n_squire' }, { uid: 3, cardId: 'n_spear' }];

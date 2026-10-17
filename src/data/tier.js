@@ -1,18 +1,18 @@
 // npm run tier で生成 (構築済みデッキ同士の AI 総当たり)。手で編集しない。
 export const TIER = {
-  "version": "2.0.1",
+  "version": "2.0.2",
   "date": "2026-10-17",
   "games": 630,
   "perPair": 14,
-  "avgRounds": 15.2,
+  "avgRounds": 15.3,
   "factions": [
     {
       "id": "wing",
       "name": "双翼の竜",
-      "wins": 207,
+      "wins": 208,
       "losses": 16,
-      "draws": 1,
-      "rate": 0.926,
+      "draws": 0,
+      "rate": 0.929,
       "tier": "S"
     },
     {
@@ -25,17 +25,17 @@ export const TIER = {
       "tier": "B"
     },
     {
-      "id": "forest",
-      "name": "翠緑の森",
+      "id": "fire",
+      "name": "紅蓮帝国",
       "wins": 81,
-      "losses": 142,
-      "draws": 1,
-      "rate": 0.364,
+      "losses": 143,
+      "draws": 0,
+      "rate": 0.362,
       "tier": "D"
     },
     {
-      "id": "fire",
-      "name": "紅蓮帝国",
+      "id": "forest",
+      "name": "翠緑の森",
       "wins": 81,
       "losses": 143,
       "draws": 0,
@@ -58,19 +58,19 @@ export const TIER = {
       "faction": "wing",
       "name": "双翼の竜宴",
       "wins": 118,
-      "losses": 7,
-      "draws": 1,
-      "rate": 0.94,
+      "losses": 8,
+      "draws": 0,
+      "rate": 0.937,
       "tier": "S"
     },
     {
       "id": "wing_enh",
       "faction": "wing",
       "name": "エンハンス竜騎",
-      "wins": 103,
-      "losses": 23,
+      "wins": 104,
+      "losses": 22,
       "draws": 0,
-      "rate": 0.817,
+      "rate": 0.825,
       "tier": "S"
     },
     {
@@ -94,19 +94,19 @@ export const TIER = {
       "tier": "B"
     },
     {
-      "id": "forest_grove",
-      "faction": "forest",
-      "name": "大樹の園",
-      "wins": 53,
-      "losses": 72,
-      "draws": 1,
-      "rate": 0.425,
-      "tier": "D"
-    },
-    {
       "id": "fire_scorch",
       "faction": "fire",
       "name": "焦土作戦",
+      "wins": 53,
+      "losses": 73,
+      "draws": 0,
+      "rate": 0.421,
+      "tier": "D"
+    },
+    {
+      "id": "forest_grove",
+      "faction": "forest",
+      "name": "大樹の園",
       "wins": 53,
       "losses": 73,
       "draws": 0,
@@ -165,7 +165,7 @@ export const TIER = {
       "fire": 0.393,
       "azure": 0.536,
       "lab": 0.446,
-      "wing": 0.08
+      "wing": 0.071
     },
     "azure": {
       "fire": 0.536,
@@ -181,7 +181,7 @@ export const TIER = {
     },
     "wing": {
       "fire": 0.893,
-      "forest": 0.92,
+      "forest": 0.929,
       "azure": 0.964,
       "lab": 0.929
     }

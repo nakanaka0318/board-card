@@ -332,8 +332,8 @@ export function cardTargets(s, p, cardId) {
   return targetsFor(s, p, c.target);
 }
 
-// 環境「竜の居る空」: その環境の持ち主の手札のカードは必要マナ-2
-export const DRAGON_DISCOUNT = 2;
+// 環境「竜の居る空」: その環境の持ち主の手札のカードは必要マナ-1
+export const DRAGON_DISCOUNT = 1;
 export function costOf(s, p, cardId) {
   const c = CARDS[cardId];
   if (!c) return 0;
