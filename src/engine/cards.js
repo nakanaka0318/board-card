@@ -819,17 +819,13 @@ def('dr_wyvern', {
 });
 def('dr_elder', {
   name: '古竜バハル', faction: 'wing', type: 'unit', cost: 8, atk: 8, hp: 8, move: 2, keywords: ['guard'], model: 'elderdragon',
-  text: '召喚時: 敵ユニットすべてに2ダメージ。',
-  onSummon(G, c) { G.fx('nova', c.self, null, { radius: 6, color: '#ff8a3a' }); for (const u of G.enemyUnits(c.player)) G.damage(u, 2, 'spell'); },
+  text: '',
 });
 def('s_dr_roar', {
   name: '竜の咆哮', faction: 'wing', type: 'spell', cost: 1, target: 'enemyUnit', icon: '🐲', fx: 'spark',
-  text: '敵ユニット1体に2ダメージ。エンハンス6: 代わりに敵ユニットすべてに2ダメージ。',
+  text: '敵ユニット1体に2ダメージ。エンハンス6: 代わりに4ダメージ。',
   enhance: { cost: 6 },
-  effect(G, c) {
-    if (c.enhanced) { G.fx('nova', G.leaderOf(c.player), null, { radius: 6, color: '#ffcf6a' }); for (const u of G.enemyUnits(c.player)) G.damage(u, 2, 'spell'); }
-    else G.damage(c.target, 2, 'spell');
-  },
+  effect(G, c) { G.damage(c.target, c.enhanced ? 4 : 2, 'spell'); },
 });
 def('s_dr_scale', {
   name: '竜鱗の加護', faction: 'wing', type: 'spell', cost: 2, target: 'friendlyUnit', icon: '🛡', fx: 'buff',
@@ -875,15 +871,14 @@ def('dr_zelva', {
 });
 def('dr_gran', {
   name: '竜騎士長グラン', faction: 'wing', type: 'unit', cost: 4, atk: 4, hp: 4, move: 3, model: 'dragonknight', legend: true,
-  text: 'エンハンス8: +4/+4 し、突撃を得る。敵ユニットすべてに1ダメージ。',
-  enhance: { cost: 8, effect(G, c) { G.buff(c.self, 4, 4); G.wake(c.self); G.fx('nova', c.self, null, { radius: 6, color: '#ffd24a' }); for (const u of G.enemyUnits(c.player)) G.damage(u, 1, 'spell'); } },
+  text: 'エンハンス8: +4/+4 し、突撃を得る。',
+  enhance: { cost: 8, effect(G, c) { G.buff(c.self, 4, 4); G.wake(c.self); } },
 });
 def('s_dr_dusk', {
-  name: '竜の黄昏', faction: 'wing', type: 'spell', cost: 8, target: null, icon: '🌅', fx: 'crow', legend: true,
-  text: '敵ユニットすべてに4ダメージ。自分の将のHPを4回復。',
+  name: '竜の黄昏', faction: 'wing', type: 'spell', cost: 8, target: 'enemyAny', icon: '🌅', fx: 'fireball', legend: true,
+  text: '敵1体 (将を含む) に6ダメージ。自分の将のHPを4回復。',
   effect(G, c) {
-    G.fx('nova', G.leaderOf(c.player), null, { radius: 7, color: '#ff9a3a' });
-    for (const u of G.enemyUnits(c.player)) G.damage(u, 4, 'spell');
+    G.damage(c.target, 6, 'spell');
     G.heal(G.leaderOf(c.player), 4);
   },
 });
